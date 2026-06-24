@@ -25,12 +25,12 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Use getSession() to avoid hitting Supabase Auth rate limits on every request.
+  // getUser() makes a network call each time; getSession() reads from the cookie.
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   const { pathname } = request.nextUrl;
-
   const publicPaths = ["/login", "/join", "/api/auth"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 

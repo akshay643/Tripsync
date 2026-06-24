@@ -3,9 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
-import { ExpenseCard } from "@/components/expenses/ExpenseCard";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { ExpenseListClient } from "@/components/expenses/ExpenseListClient";
 import { formatCurrency } from "@/lib/utils";
 import { Plus, Receipt } from "lucide-react";
 
@@ -35,10 +34,7 @@ export default async function ExpensesPage({
     .order("date", { ascending: false });
 
   const totalSpend = (expenses ?? []).reduce((s: number, e: any) => s + e.amount, 0);
-  const myExpenses = (expenses ?? []).filter((e: any) =>
-    e.expense_splits?.some((s: any) => s.user_id === user?.id)
-  );
-  const myTotal = myExpenses.reduce((s: number, e: any) => {
+  const myTotal = (expenses ?? []).reduce((s: number, e: any) => {
     const split = e.expense_splits?.find((sp: any) => sp.user_id === user?.id);
     return s + (split?.amount ?? 0);
   }, 0);
@@ -51,43 +47,41 @@ export default async function ExpensesPage({
         right={
           <Link href={`/trips/${tripId}/expenses/new`}>
             <Button size="sm" className="gap-1">
-              <Plus className="h-4 w-4" />
-              Add
+              <Plus className="h-4 w-4" />Add
             </Button>
           </Link>
         }
       />
 
-      <div className="px-4 py-4 grid grid-cols-2 gap-3 mb-2">
-        <div className="rounded-2xl bg-indigo-50 p-4">
-          <p className="text-xs text-indigo-500 font-medium">Total spent</p>
-          <p className="text-xl font-bold text-indigo-900 mt-0.5">{formatCurrency(totalSpend)}</p>
+      {/* Summary bar */}
+      <div className="px-4 py-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-linear-to-br from-indigo-500 to-indigo-600 p-4 text-white">
+          <p className="text-xs text-indigo-200 font-medium">Group total</p>
+          <p className="text-2xl font-bold mt-0.5">{formatCurrency(totalSpend)}</p>
+          <p className="text-indigo-200 text-xs mt-1">{expenses?.length ?? 0} expenses</p>
         </div>
-        <div className="rounded-2xl bg-amber-50 p-4">
-          <p className="text-xs text-amber-600 font-medium">Your share</p>
-          <p className="text-xl font-bold text-amber-900 mt-0.5">{formatCurrency(myTotal)}</p>
+        <div className="rounded-2xl bg-linear-to-br from-amber-500 to-orange-500 p-4 text-white">
+          <p className="text-xs text-amber-100 font-medium">Your share</p>
+          <p className="text-2xl font-bold mt-0.5">{formatCurrency(myTotal)}</p>
+          <p className="text-amber-100 text-xs mt-1">across all splits</p>
         </div>
       </div>
 
       {(expenses ?? []).length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-          <Receipt className="h-12 w-12 text-gray-200 mb-4" />
-          <p className="font-semibold text-gray-700">No expenses yet</p>
-          <p className="text-sm text-gray-400 mt-1 mb-5">Add the first expense for this trip</p>
+          <div className="h-16 w-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-4">
+            <Receipt className="h-8 w-8 text-gray-300" />
+          </div>
+          <p className="font-bold text-gray-800">No expenses yet</p>
+          <p className="text-sm text-gray-400 mt-1 mb-6">Be the first to add one</p>
           <Link href={`/trips/${tripId}/expenses/new`}>
-            <Button className="gap-2"><Plus className="h-4 w-4" />Add Expense</Button>
+            <Button className="gap-2 shadow-lg shadow-indigo-200">
+              <Plus className="h-4 w-4" />Add Expense
+            </Button>
           </Link>
         </div>
       ) : (
-        <div className="px-4 divide-y divide-gray-100">
-          {(expenses ?? []).map((expense: any) => (
-            <ExpenseCard
-              key={expense.id}
-              expense={{ ...expense, payer: expense.profiles }}
-              currentUserId={user?.id ?? ""}
-            />
-          ))}
-        </div>
+        <ExpenseListClient expenses={expenses ?? []} currentUserId={user?.id ?? ""} />
       )}
     </>
   );

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2 } from "lucide-react";
 import { buildEqualSplits } from "@/lib/settlement";
 import { CATEGORY_LABELS, CATEGORY_ICONS, formatCurrency, getInitials } from "@/lib/utils";
+import { staggerContainer, staggerItem } from "@/components/ui/motion";
 import type { Profile, SplitType } from "@/types";
 
 interface ExpenseFormProps {
@@ -26,6 +27,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [splitType, setSplitType] = useState<SplitType>("equal");
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
@@ -51,6 +53,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
     e.preventDefault();
     if (!form.title || !form.amount) return;
     setLoading(true);
+    setError("");
 
     const { data: expense, error: expErr } = await supabase
       .from("expenses")
@@ -67,9 +70,13 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
       .select()
       .single();
 
-    if (expErr || !expense) { setLoading(false); return; }
+    if (expErr || !expense) {
+      setError(expErr?.message ?? "Failed to add expense");
+      setLoading(false);
+      return;
+    }
 
-    let splits: { expense_id: string; user_id: string; amount: number; percentage?: number }[] = [];
+    let splits: { expense_id: string; user_id: string; amount: number }[] = [];
 
     if (splitType === "equal") {
       splits = buildEqualSplits(totalAmount, members.map((m) => m.id)).map((s) => ({
@@ -97,43 +104,74 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 p-4">
-      <div className="space-y-1.5">
-        <Label>Title *</Label>
-        <Input placeholder="Dinner at Curlies" value={form.title} onChange={(e) => set("title", e.target.value)} required />
-      </div>
+    <motion.form
+      onSubmit={handleSubmit}
+      variants={staggerContainer}
+      initial="initial"
+      animate="animate"
+      className="px-4 py-5 space-y-4 pb-10"
+    >
+      {/* Category picker */}
+      <motion.div variants={staggerItem} className="space-y-2">
+        <Label className="text-sm font-semibold text-gray-700">Category</Label>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {CATEGORIES.map((cat) => (
+            <motion.button
+              key={cat}
+              type="button"
+              onClick={() => set("category", cat)}
+              whileTap={{ scale: 0.92 }}
+              className={`shrink-0 flex flex-col items-center gap-1 rounded-2xl px-3 py-2.5 border text-xs font-medium transition-all ${
+                form.category === cat
+                  ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
+                  : "bg-white text-gray-600 border-gray-200"
+              }`}
+            >
+              <span className="text-lg">{CATEGORY_ICONS[cat]}</span>
+              <span>{CATEGORY_LABELS[cat]}</span>
+            </motion.button>
+          ))}
+        </div>
+      </motion.div>
 
-      <div className="space-y-1.5">
-        <Label>Amount (₹) *</Label>
-        <Input type="number" placeholder="2000" value={form.amount} onChange={(e) => set("amount", e.target.value)} required />
-      </div>
+      <motion.div variants={staggerItem} className="space-y-1.5">
+        <Label className="text-sm font-semibold text-gray-700">Title *</Label>
+        <Input
+          placeholder="Dinner at Curlies"
+          value={form.title}
+          onChange={(e) => set("title", e.target.value)}
+          required
+          className="h-12 rounded-xl border-gray-200 bg-white"
+        />
+      </motion.div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <motion.div variants={staggerItem} className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label>Category</Label>
-          <Select value={form.category} onValueChange={(v) => set("category", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIES.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label className="text-sm font-semibold text-gray-700">Amount (₹) *</Label>
+          <Input
+            type="number"
+            placeholder="2000"
+            value={form.amount}
+            onChange={(e) => set("amount", e.target.value)}
+            required
+            className="h-12 rounded-xl border-gray-200 bg-white text-lg font-bold"
+          />
         </div>
         <div className="space-y-1.5">
-          <Label>Date</Label>
-          <Input type="date" value={form.date} onChange={(e) => set("date", e.target.value)} />
+          <Label className="text-sm font-semibold text-gray-700">Date</Label>
+          <Input
+            type="date"
+            value={form.date}
+            onChange={(e) => set("date", e.target.value)}
+            className="h-12 rounded-xl border-gray-200 bg-white"
+          />
         </div>
-      </div>
+      </motion.div>
 
-      <div className="space-y-1.5">
-        <Label>Paid by</Label>
+      <motion.div variants={staggerItem} className="space-y-1.5">
+        <Label className="text-sm font-semibold text-gray-700">Paid by</Label>
         <Select value={form.paid_by} onValueChange={(v) => set("paid_by", v)}>
-          <SelectTrigger>
+          <SelectTrigger className="h-12 rounded-xl border-gray-200 bg-white">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -144,73 +182,117 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </motion.div>
 
-      <div className="space-y-2">
-        <Label>Split type</Label>
-        <div className="flex gap-2">
+      {/* Split type tabs */}
+      <motion.div variants={staggerItem} className="space-y-3">
+        <Label className="text-sm font-semibold text-gray-700">Split type</Label>
+        <div className="relative flex gap-1 bg-gray-100 rounded-xl p-1">
           {(["equal", "custom"] as SplitType[]).map((type) => (
-            <button
+            <motion.button
               key={type}
               type="button"
               onClick={() => setSplitType(type)}
-              className={`flex-1 rounded-xl py-2 text-sm font-medium border transition-colors ${
-                splitType === type
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white text-gray-700 border-gray-200"
+              className={`relative flex-1 py-2 rounded-lg text-sm font-semibold transition-colors z-10 ${
+                splitType === type ? "text-gray-900" : "text-gray-500"
               }`}
             >
-              {type === "equal" ? "Equal" : "Custom"}
-            </button>
+              {splitType === type && (
+                <motion.div
+                  layoutId="split-pill"
+                  className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                  transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className="relative">{type === "equal" ? "Equal Split" : "Custom"}</span>
+            </motion.button>
           ))}
         </div>
-      </div>
 
-      {splitType === "equal" && totalAmount > 0 && (
-        <div className="rounded-xl bg-indigo-50 p-3 text-sm text-indigo-700">
-          {formatCurrency(equalShare)} each × {members.length} people
-        </div>
-      )}
-
-      {splitType === "custom" && (
-        <div className="space-y-2">
-          {members.map((m) => (
-            <div key={m.id} className="flex items-center gap-3">
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={m.avatar || undefined} />
-                <AvatarFallback>{getInitials(m.name)}</AvatarFallback>
-              </Avatar>
-              <span className="flex-1 text-sm text-gray-700">
-                {m.id === currentUserId ? "You" : m.name || m.email}
-              </span>
-              <Input
-                type="number"
-                placeholder="0"
-                className="w-24 text-right"
-                value={customAmounts[m.id] || ""}
-                onChange={(e) =>
-                  setCustomAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))
-                }
-              />
-            </div>
-          ))}
-          {customTotal > 0 && totalAmount > 0 && Math.abs(customTotal - totalAmount) > 0.01 && (
-            <p className="text-xs text-red-500">
-              Total ({formatCurrency(customTotal)}) doesn&apos;t match amount ({formatCurrency(totalAmount)})
-            </p>
+        <AnimatePresence mode="wait">
+          {splitType === "equal" && totalAmount > 0 && (
+            <motion.div
+              key="equal-hint"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-sm text-indigo-700 font-medium"
+            >
+              {formatCurrency(equalShare)} each × {members.length} people
+            </motion.div>
           )}
-        </div>
+
+          {splitType === "custom" && (
+            <motion.div
+              key="custom-list"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-2"
+            >
+              {members.map((m) => (
+                <div key={m.id} className="flex items-center gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={m.avatar || undefined} />
+                    <AvatarFallback className="text-xs">{getInitials(m.name)}</AvatarFallback>
+                  </Avatar>
+                  <span className="flex-1 text-sm text-gray-700 font-medium">
+                    {m.id === currentUserId ? "You" : m.name || m.email}
+                  </span>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    className="w-24 text-right h-10 rounded-xl"
+                    value={customAmounts[m.id] || ""}
+                    onChange={(e) =>
+                      setCustomAmounts((prev) => ({ ...prev, [m.id]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+              {customTotal > 0 && totalAmount > 0 && Math.abs(customTotal - totalAmount) > 0.01 && (
+                <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
+                  Total ({formatCurrency(customTotal)}) doesn&apos;t match ({formatCurrency(totalAmount)})
+                </p>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      <motion.div variants={staggerItem} className="space-y-1.5">
+        <Label className="text-sm font-semibold text-gray-700">Notes</Label>
+        <Textarea
+          placeholder="Optional notes…"
+          value={form.notes}
+          onChange={(e) => set("notes", e.target.value)}
+          className="rounded-xl border-gray-200 bg-white resize-none"
+          rows={2}
+        />
+      </motion.div>
+
+      {error && (
+        <motion.p
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-2"
+        >
+          {error}
+        </motion.p>
       )}
 
-      <div className="space-y-1.5">
-        <Label>Notes</Label>
-        <Textarea placeholder="Optional notes..." value={form.notes} onChange={(e) => set("notes", e.target.value)} />
-      </div>
-
-      <Button type="submit" className="w-full" disabled={loading || !form.title || !form.amount}>
-        {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-        Add Expense
-      </Button>
-    </form>
+      <motion.div variants={staggerItem}>
+        <motion.button
+          type="submit"
+          disabled={loading || !form.title || !form.amount}
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full h-12 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+        >
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {loading ? "Adding…" : "Add Expense"}
+        </motion.button>
+      </motion.div>
+    </motion.form>
   );
 }

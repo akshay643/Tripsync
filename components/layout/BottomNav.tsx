@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Map, Receipt, Luggage, User } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -16,21 +17,34 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 backdrop-blur-md">
-      <div className="flex items-center justify-around px-2 py-2 max-w-lg mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100/80 bg-white/90 backdrop-blur-xl">
+      <div className="flex items-center justify-around px-1 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] max-w-lg mx-auto">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + "/");
+          const active = pathname === href || (pathname.startsWith(href + "/") && href !== "/");
           return (
             <Link
               key={href}
               href={href}
-              className={cn(
-                "flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors min-w-[60px]",
-                active ? "text-indigo-600" : "text-gray-400"
-              )}
+              className="relative flex flex-col items-center gap-0.5 px-5 py-1 min-w-15"
             >
-              <Icon className={cn("h-5 w-5", active && "fill-indigo-100")} strokeWidth={active ? 2.5 : 1.5} />
-              <span className={cn("text-[10px] font-medium", active ? "text-indigo-600" : "text-gray-400")}>
+              {active && (
+                <motion.div
+                  layoutId="nav-pill"
+                  className="absolute inset-0 rounded-2xl bg-indigo-50"
+                  transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                />
+              )}
+              <motion.div
+                className="relative z-10"
+                animate={{ scale: active ? 1.1 : 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              >
+                <Icon
+                  className={cn("h-5.5 w-5.5 transition-colors", active ? "text-indigo-600" : "text-gray-400")}
+                  strokeWidth={active ? 2.5 : 1.8}
+                />
+              </motion.div>
+              <span className={cn("relative z-10 text-[10px] font-semibold transition-colors", active ? "text-indigo-600" : "text-gray-400")}>
                 {label}
               </span>
             </Link>

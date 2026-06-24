@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Check, ArrowRight } from "lucide-react";
+import { CheckCircle2, ArrowRight, PartyPopper } from "lucide-react";
 import { formatCurrency, getInitials } from "@/lib/utils";
+import { staggerContainer, staggerItem } from "@/components/ui/motion";
 import type { CalculatedSettlement, Profile } from "@/types";
 
-interface SettlementListProps {
+interface Props {
   tripId: string;
   settlements: CalculatedSettlement[];
   profiles: Record<string, Profile>;
@@ -16,102 +17,117 @@ interface SettlementListProps {
   existingSettled: Set<string>;
 }
 
-function settlementKey(s: CalculatedSettlement) {
-  return `${s.from_user}:${s.to_user}`;
-}
+function key(s: CalculatedSettlement) { return `${s.from_user}:${s.to_user}`; }
 
-export function SettlementList({
-  tripId,
-  settlements,
-  profiles,
-  currentUserId,
-  existingSettled,
-}: SettlementListProps) {
+export function SettlementList({ tripId, settlements, profiles, currentUserId, existingSettled }: Props) {
   const supabase = createClient();
   const [settled, setSettled] = useState<Set<string>>(existingSettled);
   const [loading, setLoading] = useState<string | null>(null);
 
-  async function markSettled(settlement: CalculatedSettlement) {
-    const key = settlementKey(settlement);
-    setLoading(key);
-
+  async function markSettled(s: CalculatedSettlement) {
+    const k = key(s);
+    setLoading(k);
     await supabase.from("settlements").upsert({
       trip_id: tripId,
-      from_user: settlement.from_user,
-      to_user: settlement.to_user,
-      amount: settlement.amount,
+      from_user: s.from_user,
+      to_user: s.to_user,
+      amount: s.amount,
       settled: true,
       settled_at: new Date().toISOString(),
     });
-
-    setSettled((prev) => new Set([...prev, key]));
+    setSettled((prev) => new Set([...prev, k]));
     setLoading(null);
   }
 
   if (settlements.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="text-4xl mb-3">🎉</div>
-        <p className="font-semibold text-gray-900">All settled up!</p>
-        <p className="text-sm text-gray-500 mt-1">No outstanding balances</p>
-      </div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center justify-center py-16 text-center"
+      >
+        <div className="h-20 w-20 rounded-3xl bg-emerald-50 flex items-center justify-center mb-4">
+          <PartyPopper className="h-10 w-10 text-emerald-500" />
+        </div>
+        <p className="text-lg font-bold text-gray-900">All settled up!</p>
+        <p className="text-sm text-gray-400 mt-1">No outstanding balances 🎉</p>
+      </motion.div>
     );
   }
 
+  const pending = settlements.filter((s) => !settled.has(key(s)));
+  const done = settlements.filter((s) => settled.has(key(s)));
+
   return (
-    <div className="space-y-3">
-      {settlements.map((settlement) => {
-        const key = settlementKey(settlement);
-        const isSettled = settled.has(key);
-        const fromProfile = profiles[settlement.from_user];
-        const toProfile = profiles[settlement.to_user];
-        const isMe = settlement.from_user === currentUserId;
-
-        return (
-          <div
-            key={key}
-            className={`flex items-center gap-3 rounded-2xl border p-4 transition-colors ${
-              isSettled ? "border-emerald-100 bg-emerald-50" : "border-gray-100 bg-white"
-            }`}
-          >
-            <Avatar className="h-9 w-9">
-              <AvatarImage src={fromProfile?.avatar || undefined} />
-              <AvatarFallback>{getInitials(fromProfile?.name)}</AvatarFallback>
-            </Avatar>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 text-sm">
-                <span className="font-medium text-gray-900">
-                  {isMe ? "You" : fromProfile?.name || "Someone"}
-                </span>
-                <ArrowRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                <span className="font-medium text-gray-900 truncate">
-                  {settlement.to_user === currentUserId ? "You" : toProfile?.name || "Someone"}
-                </span>
-              </div>
-              <p className="text-base font-semibold text-gray-900 mt-0.5">
-                {formatCurrency(settlement.amount)}
-              </p>
-            </div>
-
-            {isSettled ? (
-              <div className="flex items-center gap-1 text-emerald-600 text-sm font-medium">
-                <Check className="h-4 w-4" />
-                Done
-              </div>
-            ) : isMe ? (
-              <Button
-                size="sm"
-                onClick={() => markSettled(settlement)}
-                disabled={loading === key}
-                className="shrink-0"
+    <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
+      {pending.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">To settle</p>
+          {pending.map((s) => {
+            const k = key(s);
+            const from = profiles[s.from_user];
+            const to = profiles[s.to_user];
+            const isMe = s.from_user === currentUserId;
+            return (
+              <motion.div key={k} variants={staggerItem}
+                className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 p-4 shadow-sm"
               >
-                Settle
-              </Button>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
+                <Avatar className="h-10 w-10 shrink-0">
+                  <AvatarImage src={from?.avatar ?? undefined} />
+                  <AvatarFallback>{getInitials(from?.name)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1 text-sm font-semibold text-gray-900">
+                    <span>{isMe ? "You" : from?.name?.split(" ")[0] ?? "Someone"}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                    <span>{s.to_user === currentUserId ? "You" : to?.name?.split(" ")[0] ?? "Someone"}</span>
+                  </div>
+                  <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(s.amount)}</p>
+                </div>
+                {isMe && (
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => markSettled(s)}
+                    disabled={loading === k}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-xl disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    {loading === k ? "…" : "Settle"}
+                  </motion.button>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
+      {done.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mt-4">Settled</p>
+          {done.map((s) => {
+            const from = profiles[s.from_user];
+            const to = profiles[s.to_user];
+            const isMe = s.from_user === currentUserId;
+            return (
+              <div key={key(s)} className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+                <Avatar className="h-10 w-10 shrink-0 opacity-60">
+                  <AvatarImage src={from?.avatar ?? undefined} />
+                  <AvatarFallback>{getInitials(from?.name)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0 opacity-60">
+                  <div className="flex items-center gap-1 text-sm font-semibold text-gray-700">
+                    <span>{isMe ? "You" : from?.name?.split(" ")[0]}</span>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+                    <span>{s.to_user === currentUserId ? "You" : to?.name?.split(" ")[0]}</span>
+                  </div>
+                  <p className="text-sm font-bold text-gray-600 line-through">{formatCurrency(s.amount)}</p>
+                </div>
+                <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
   );
 }
