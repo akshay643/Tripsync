@@ -9,12 +9,14 @@ import { staggerContainer, staggerItem } from "@/components/ui/motion";
 import {
   Map, Receipt, Users, Calendar, ArrowRightLeft, MapPin, Wallet,
 } from "lucide-react";
+import { LocationShareButton } from "@/components/map/LocationShareButton";
 
 interface Props {
   trip: any;
   tripId: string;
   totalSpend: number;
   expenseCount: number;
+  currentUserId: string;
 }
 
 const navCards = (tripId: string) => [
@@ -25,7 +27,7 @@ const navCards = (tripId: string) => [
   { href: `/trips/${tripId}/members`, icon: Users, label: "Members", sub: "Who's in", color: "from-pink-500 to-rose-500", bg: "bg-pink-50", text: "text-pink-600" },
 ];
 
-export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount }: Props) {
+export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, currentUserId }: Props) {
   const budgetPct = trip.budget ? Math.min((totalSpend / trip.budget) * 100, 100) : 0;
   const overBudget = budgetPct >= 100;
 
@@ -85,18 +87,21 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount }: 
         </div>
 
         {/* Members */}
-        <div className="flex items-center gap-2 mt-4">
-          <div className="flex -space-x-2">
-            {trip.trip_members.slice(0, 6).map((m: any) => (
-              <Avatar key={m.user_id} className="h-7 w-7 border-2 border-indigo-600">
-                <AvatarImage src={m.profiles?.avatar} />
-                <AvatarFallback className="text-xs bg-indigo-400 text-white">{getInitials(m.profiles?.name)}</AvatarFallback>
-              </Avatar>
-            ))}
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center gap-2">
+            <div className="flex -space-x-2">
+              {trip.trip_members.slice(0, 6).map((m: any) => (
+                <Avatar key={m.user_id} className="h-7 w-7 border-2 border-indigo-600">
+                  <AvatarImage src={m.profiles?.avatar} />
+                  <AvatarFallback className="text-xs bg-indigo-400 text-white">{getInitials(m.profiles?.name)}</AvatarFallback>
+                </Avatar>
+              ))}
+            </div>
+            <p className="text-indigo-200 text-xs">
+              {trip.trip_members.length} member{trip.trip_members.length !== 1 ? "s" : ""}
+            </p>
           </div>
-          <p className="text-indigo-200 text-xs">
-            {trip.trip_members.length} member{trip.trip_members.length !== 1 ? "s" : ""}
-          </p>
+          <LocationShareButton tripId={tripId} currentUserId={currentUserId} />
         </div>
       </div>
 

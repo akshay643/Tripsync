@@ -45,6 +45,7 @@ export default async function TripDashboardPage({
         tripId={tripId}
         totalSpend={totalSpend}
         expenseCount={expenses?.length ?? 0}
+        currentUserId={user?.id ?? ""}
       />
     </>
   );
