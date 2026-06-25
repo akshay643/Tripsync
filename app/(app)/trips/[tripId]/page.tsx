@@ -1,7 +1,6 @@
 export const dynamic = "force-dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import { InviteSheet } from "@/components/trips/InviteSheet";
 import { TripDashboardClient } from "@/components/trips/TripDashboardClient";
@@ -13,23 +12,17 @@ export default async function TripDashboardPage({
 }) {
   const { tripId } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
 
-  const { data: trip } = await supabase
-    .from("trips")
-    .select("*, trip_members(*, profiles(*))")
-    .eq("id", tripId)
-    .single();
+  // All three fetches in parallel
+  const [{ data: { user } }, { data: trip }, { data: expenses }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("trips").select("*, trip_members(*, profiles(*))").eq("id", tripId).single(),
+    supabase.from("expenses").select("amount").eq("trip_id", tripId),
+  ]);
 
   if (!trip) notFound();
-
   const isMember = trip.trip_members.some((m: any) => m.user_id === user?.id);
   if (!isMember) notFound();
-
-  const { data: expenses } = await supabase
-    .from("expenses")
-    .select("amount")
-    .eq("trip_id", tripId);
 
   const totalSpend = (expenses ?? []).reduce((s: number, e: any) => s + e.amount, 0);
 

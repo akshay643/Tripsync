@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Navigation, MapPin, X, Clock, Radio, Users } from "lucide-react";
+import { Navigation, MapPin, X, Clock, Radio, Users, ExternalLink } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import type { Location, Profile, MeetupPoint } from "@/types";
 
@@ -18,6 +18,10 @@ const SHARE_DURATIONS = [
   { label: "2 hours", minutes: 120 },
   { label: "Until I stop", minutes: 0 },
 ];
+
+function googleMapsUrl(lat: number, lng: number) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
 
 export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -35,10 +39,8 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
 
   const hasToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-  // Init map
   useEffect(() => {
     if (!mapContainer.current || !hasToken) return;
-
     let cancelled = false;
     import("mapbox-gl").then((mod) => {
       if (cancelled || !mapContainer.current) return;
@@ -55,7 +57,6 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
       m.on("load", () => setMapReady(true));
       mapRef.current = m;
     });
-
     return () => {
       cancelled = true;
       mapRef.current?.remove();
@@ -63,42 +64,30 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
     };
   }, [hasToken, tripId]);
 
-  // Fetch + realtime
   useEffect(() => {
     fetchLocations();
     fetchMeetupPoints();
-
     const channel = supabase
       .channel(`map:${tripId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "locations", filter: `trip_id=eq.${tripId}` }, fetchLocations)
       .on("postgres_changes", { event: "*", schema: "public", table: "meetup_points", filter: `trip_id=eq.${tripId}` }, fetchMeetupPoints)
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [tripId]);
 
   async function fetchLocations() {
-    const { data } = await supabase
-      .from("locations")
-      .select("*")
-      .eq("trip_id", tripId)
-      .eq("sharing_enabled", true);
+    const { data } = await supabase.from("locations").select("*").eq("trip_id", tripId).eq("sharing_enabled", true);
     if (data) setLocations(data);
   }
 
   async function fetchMeetupPoints() {
-    const { data } = await supabase
-      .from("meetup_points")
-      .select("*")
-      .eq("trip_id", tripId)
-      .eq("active", true);
+    const { data } = await supabase.from("meetup_points").select("*").eq("trip_id", tripId).eq("active", true);
     if (data) setMeetupPoints(data);
   }
 
-  // Update markers when locations change
+  // Render markers with popups that have a Google Maps link
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
-
     import("mapbox-gl").then((mod) => {
       const mapboxgl = mod.default;
       Object.values(markersRef.current).forEach((m: any) => m.remove());
@@ -106,28 +95,55 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
 
       locations.forEach((loc) => {
         const profile = memberProfiles[loc.user_id];
+        const isMe = loc.user_id === currentUserId;
+        const name = isMe ? "You" : profile?.name?.split(" ")[0] || "?";
+
         const el = document.createElement("div");
         el.style.cssText = "display:flex;flex-direction:column;align-items:center;cursor:pointer;";
-        const isMe = loc.user_id === currentUserId;
         el.innerHTML = `
-          <div style="width:40px;height:40px;border-radius:50%;background:${isMe ? "#4F46E5" : "#0EA5E9"};border:3px solid white;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;">
-            ${profile?.avatar ? `<img src="${profile.avatar}" style="width:100%;height:100%;object-fit:cover;" />` : getInitials(profile?.name)}
+          <div style="width:42px;height:42px;border-radius:50%;background:${isMe ? "#4F46E5" : "#0EA5E9"};border:3px solid white;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,0.22);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;">
+            ${profile?.avatar ? `<img src="${profile.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />` : getInitials(profile?.name)}
           </div>
-          <div style="font-size:11px;font-weight:600;color:#1f2937;background:white;border-radius:10px;padding:2px 7px;margin-top:4px;box-shadow:0 1px 4px rgba(0,0,0,0.15);white-space:nowrap;">
-            ${isMe ? "You" : profile?.name?.split(" ")[0] || "?"}
+          <div style="font-size:11px;font-weight:700;color:#1f2937;background:white;border-radius:10px;padding:2px 8px;margin-top:4px;box-shadow:0 1px 6px rgba(0,0,0,0.12);white-space:nowrap;">
+            ${name}
           </div>`;
+
+        // Popup with Google Maps navigate button
+        const popup = new mapboxgl.Popup({ offset: 55, closeButton: true, className: "tripsync-popup" })
+          .setHTML(`
+            <div style="padding:4px 2px;min-width:140px;">
+              <p style="font-size:13px;font-weight:700;color:#111;margin:0 0 8px;">${isMe ? "Your location" : `${profile?.name || "Member"}'s location`}</p>
+              <a href="${googleMapsUrl(loc.latitude, loc.longitude)}" target="_blank" rel="noopener"
+                style="display:flex;align-items:center;gap:6px;background:#4F46E5;color:white;border-radius:10px;padding:8px 12px;text-decoration:none;font-size:12px;font-weight:600;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+                Navigate in Google Maps
+              </a>
+            </div>`);
+
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat([loc.longitude, loc.latitude])
+          .setPopup(popup)
           .addTo(mapRef.current);
+
         markersRef.current[loc.user_id] = marker;
       });
 
       meetupPoints.forEach((p) => {
         const el = document.createElement("div");
-        el.innerHTML = `<div style="background:#F59E0B;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">📍</div>`;
+        el.innerHTML = `<div style="background:#F59E0B;color:white;border-radius:50%;width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">📍</div>`;
+        const popup = new mapboxgl.Popup({ offset: 28 })
+          .setHTML(`
+            <div style="padding:4px 2px;">
+              <p style="font-weight:700;font-size:13px;margin:0 0 6px;">${p.title}</p>
+              <a href="${googleMapsUrl(p.latitude, p.longitude)}" target="_blank" rel="noopener"
+                style="display:flex;align-items:center;gap:6px;background:#F59E0B;color:white;border-radius:10px;padding:7px 12px;text-decoration:none;font-size:12px;font-weight:600;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+                Open in Google Maps
+              </a>
+            </div>`);
         new mapboxgl.Marker({ element: el })
           .setLngLat([p.longitude, p.latitude])
-          .setPopup(new mapboxgl.Popup({ offset: 22 }).setText(p.title))
+          .setPopup(popup)
           .addTo(mapRef.current);
       });
 
@@ -155,10 +171,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
           });
           resolve();
         },
-        (err) => {
-          setGeoError("Location access denied. Please allow it in browser settings.");
-          reject(err);
-        },
+        (err) => { setGeoError("Location access denied — allow it in browser settings."); reject(err); },
         { enableHighAccuracy: false, timeout: 10000 }
       );
     });
@@ -173,7 +186,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
       setSharing(true);
       intervalRef.current = setInterval(() => pushLocation(until), 40000);
       if (minutes > 0) setTimeout(stopSharing, minutes * 60 * 1000);
-    } catch { /* geoError state already set */ }
+    } catch { }
   }
 
   async function stopSharing() {
@@ -197,11 +210,9 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
     }, () => setGeoError("Location access denied."));
   }
 
-  // No Mapbox token — show a location-sharing only UI
   if (!hasToken) {
     return (
       <div className="flex flex-col flex-1 bg-gray-50">
-        {/* Members currently sharing */}
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center gap-2 mb-3">
             <Users className="h-4 w-4 text-indigo-500" />
@@ -216,15 +227,28 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
                 const isMe = loc.user_id === currentUserId;
                 return (
                   <div key={loc.user_id} className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
-                    <div className="h-9 w-9 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
-                      {getInitials(profile?.name)}
+                    <div className={`h-10 w-10 rounded-full ${isMe ? "bg-indigo-500" : "bg-sky-500"} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
+                      {profile?.avatar
+                        ? <img src={profile.avatar} className="h-10 w-10 rounded-full object-cover" />
+                        : getInitials(profile?.name)}
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-semibold text-gray-900">{isMe ? "You" : profile?.name}</p>
                       <p className="text-xs text-gray-400 flex items-center gap-1">
-                        <Radio className="h-3 w-3 text-emerald-500" /> Live
+                        <Radio className="h-3 w-3 text-emerald-500 animate-pulse" /> Live
                       </p>
                     </div>
+                    {!isMe && (
+                      <a
+                        href={googleMapsUrl(loc.latitude, loc.longitude)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 rounded-xl px-3 py-2 text-xs font-bold shrink-0"
+                      >
+                        <Navigation className="h-3.5 w-3.5" />
+                        Navigate
+                      </a>
+                    )}
                   </div>
                 );
               })}
@@ -237,7 +261,8 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
             <div className="h-20 w-20 rounded-3xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
               <MapPin className="h-10 w-10 text-indigo-400" />
             </div>
-            <p className="text-sm text-gray-400">Map requires a Mapbox token.<br />Add <code className="text-xs bg-gray-100 px-1 rounded">NEXT_PUBLIC_MAPBOX_TOKEN</code> to env vars.</p>
+            <p className="text-sm font-semibold text-gray-700 mb-1">Map not configured</p>
+            <p className="text-xs text-gray-400">Add <code className="bg-gray-100 px-1 rounded">NEXT_PUBLIC_MAPBOX_TOKEN</code> in Vercel env vars to see the live map.</p>
           </div>
         </div>
 
@@ -261,49 +286,29 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
 }
 
 function ShareControls({ sharing, showPicker, geoError, onShare, onStop, onPickDuration, onDismissPicker, onMeetup }: {
-  sharing: boolean;
-  showPicker: boolean;
-  geoError: string;
-  onShare: () => void;
-  onStop: () => void;
-  onPickDuration: (minutes: number) => void;
-  onDismissPicker: () => void;
-  onMeetup: () => void;
+  sharing: boolean; showPicker: boolean; geoError: string;
+  onShare: () => void; onStop: () => void;
+  onPickDuration: (m: number) => void; onDismissPicker: () => void; onMeetup: () => void;
 }) {
   return (
     <div className="absolute bottom-4 left-4 right-4 space-y-2">
       <AnimatePresence>
         {geoError && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
+          <motion.div key="err" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-xs text-red-600 text-center"
-          >
-            {geoError}
-          </motion.div>
+          >{geoError}</motion.div>
         )}
-
         {showPicker && (
-          <motion.div
-            key="picker"
-            initial={{ opacity: 0, y: 12, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+          <motion.div key="picker" initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
             className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 space-y-1"
           >
             <p className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-2">
               <Clock className="h-4 w-4 text-indigo-500" />Share for how long?
             </p>
             {SHARE_DURATIONS.map(({ label, minutes }) => (
-              <motion.button
-                key={label}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => onPickDuration(minutes)}
+              <motion.button key={label} whileTap={{ scale: 0.97 }} onClick={() => onPickDuration(minutes)}
                 className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-gray-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-              >
-                {label}
-              </motion.button>
+              >{label}</motion.button>
             ))}
             <button onClick={onDismissPicker} className="w-full text-center text-xs text-gray-400 pt-1">Cancel</button>
           </motion.div>
@@ -311,46 +316,24 @@ function ShareControls({ sharing, showPicker, geoError, onShare, onStop, onPickD
       </AnimatePresence>
 
       <div className="flex gap-2">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={onMeetup}
+        <motion.button whileTap={{ scale: 0.97 }} onClick={onMeetup}
           className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl bg-white/90 backdrop-blur border border-gray-200 text-sm font-semibold text-gray-700 shadow-sm"
-        >
-          <MapPin className="h-4 w-4 text-amber-500" />
-          Drop Pin
-        </motion.button>
+        ><MapPin className="h-4 w-4 text-amber-500" />Drop Pin</motion.button>
 
         {sharing ? (
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={onStop}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onStop}
             className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl bg-red-500 text-white text-sm font-bold shadow-md"
-          >
-            <X className="h-4 w-4" />
-            Stop Sharing
-          </motion.button>
+          ><X className="h-4 w-4" />Stop Sharing</motion.button>
         ) : (
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={onShare}
+          <motion.button whileTap={{ scale: 0.97 }} onClick={onShare}
             className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-md shadow-indigo-200"
-          >
-            <Navigation className="h-4 w-4" />
-            Share Location
-          </motion.button>
+          ><Navigation className="h-4 w-4" />Share Location</motion.button>
         )}
       </div>
 
       {sharing && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-center justify-center gap-1.5 py-1"
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center gap-1.5 py-1">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
           <p className="text-xs text-gray-500 font-medium">Broadcasting your location</p>
         </motion.div>
       )}
