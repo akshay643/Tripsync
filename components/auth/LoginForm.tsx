@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { Label } from "@/components/ui/label";
@@ -17,7 +16,6 @@ function getNextUrl(): string {
 }
 
 export function LoginForm() {
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
@@ -49,7 +47,9 @@ export function LoginForm() {
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) { setError(error.message); setLoading(false); return; }
-      router.push(getNextUrl());
+      // Hard redirect so the browser sends the fresh auth cookie on the next request.
+      // router.push() does a client navigation that can race with cookie writes.
+      window.location.href = getNextUrl();
     } else {
       const { error } = await supabase.auth.signUp({
         email,
