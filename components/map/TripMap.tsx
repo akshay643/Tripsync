@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import mapboxgl from "mapbox-gl";
-import "mapbox-gl/dist/mapbox-gl.css";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { MapPin, Navigation, Clock, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Navigation, MapPin, X, Clock, Radio, Users } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import type { Location, Profile, MeetupPoint } from "@/types";
 
@@ -16,36 +14,57 @@ interface TripMapProps {
 }
 
 const SHARE_DURATIONS = [
-  { label: "30 min", minutes: 30 },
+  { label: "30 minutes", minutes: 30 },
   { label: "2 hours", minutes: 120 },
   { label: "Until I stop", minutes: 0 },
 ];
 
 export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
-  const markers = useRef<Record<string, mapboxgl.Marker>>({});
-  const locationInterval = useRef<NodeJS.Timeout | null>(null);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<Record<string, any>>({});
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
 
   const [sharing, setSharing] = useState(false);
-  const [showDurationPicker, setShowDurationPicker] = useState(false);
-  const [memberLocations, setMemberLocations] = useState<Location[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [meetupPoints, setMeetupPoints] = useState<MeetupPoint[]>([]);
+  const [mapReady, setMapReady] = useState(false);
+  const [geoError, setGeoError] = useState("");
 
+  const hasToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+  // Init map
   useEffect(() => {
-    if (!mapContainer.current || !process.env.NEXT_PUBLIC_MAPBOX_TOKEN) return;
+    if (!mapContainer.current || !hasToken) return;
 
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: "mapbox://styles/mapbox/streets-v12",
-      center: [78.9629, 20.5937],
-      zoom: 4,
+    let cancelled = false;
+    import("mapbox-gl").then((mod) => {
+      if (cancelled || !mapContainer.current) return;
+      const mapboxgl = mod.default;
+      import("mapbox-gl/dist/mapbox-gl.css").catch(() => {});
+      mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
+      const m = new mapboxgl.Map({
+        container: mapContainer.current!,
+        style: "mapbox://styles/mapbox/streets-v12",
+        center: [78.9629, 20.5937],
+        zoom: 4,
+      });
+      m.addControl(new mapboxgl.NavigationControl(), "top-right");
+      m.on("load", () => setMapReady(true));
+      mapRef.current = m;
     });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), "top-right");
+    return () => {
+      cancelled = true;
+      mapRef.current?.remove();
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [hasToken, tripId]);
 
+  // Fetch + realtime
+  useEffect(() => {
     fetchLocations();
     fetchMeetupPoints();
 
@@ -55,11 +74,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
       .on("postgres_changes", { event: "*", schema: "public", table: "meetup_points", filter: `trip_id=eq.${tripId}` }, fetchMeetupPoints)
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-      map.current?.remove();
-      if (locationInterval.current) clearInterval(locationInterval.current);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [tripId]);
 
   async function fetchLocations() {
@@ -68,7 +83,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
       .select("*")
       .eq("trip_id", tripId)
       .eq("sharing_enabled", true);
-    if (data) setMemberLocations(data);
+    if (data) setLocations(data);
   }
 
   async function fetchMeetupPoints() {
@@ -80,101 +95,96 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
     if (data) setMeetupPoints(data);
   }
 
+  // Update markers when locations change
   useEffect(() => {
-    if (!map.current) return;
+    if (!mapRef.current || !mapReady) return;
 
-    Object.values(markers.current).forEach((m) => m.remove());
-    markers.current = {};
+    import("mapbox-gl").then((mod) => {
+      const mapboxgl = mod.default;
+      Object.values(markersRef.current).forEach((m: any) => m.remove());
+      markersRef.current = {};
 
-    memberLocations.forEach((loc) => {
-      const profile = memberProfiles[loc.user_id];
-      const el = document.createElement("div");
-      el.className = "flex flex-col items-center";
-      el.innerHTML = `
-        <div style="width:36px;height:36px;border-radius:50%;background:#4F46E5;border:2.5px solid white;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:600;">
-          ${profile?.avatar ? `<img src="${profile.avatar}" style="width:100%;height:100%;object-fit:cover;" />` : getInitials(profile?.name)}
-        </div>
-        <div style="font-size:11px;font-weight:600;color:#1f2937;background:white;border-radius:8px;padding:1px 6px;margin-top:3px;box-shadow:0 1px 4px rgba(0,0,0,0.15);">
-          ${profile?.name?.split(" ")[0] || "?"}
-        </div>
-      `;
+      locations.forEach((loc) => {
+        const profile = memberProfiles[loc.user_id];
+        const el = document.createElement("div");
+        el.style.cssText = "display:flex;flex-direction:column;align-items:center;cursor:pointer;";
+        const isMe = loc.user_id === currentUserId;
+        el.innerHTML = `
+          <div style="width:40px;height:40px;border-radius:50%;background:${isMe ? "#4F46E5" : "#0EA5E9"};border:3px solid white;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.2);display:flex;align-items:center;justify-content:center;color:white;font-size:14px;font-weight:700;">
+            ${profile?.avatar ? `<img src="${profile.avatar}" style="width:100%;height:100%;object-fit:cover;" />` : getInitials(profile?.name)}
+          </div>
+          <div style="font-size:11px;font-weight:600;color:#1f2937;background:white;border-radius:10px;padding:2px 7px;margin-top:4px;box-shadow:0 1px 4px rgba(0,0,0,0.15);white-space:nowrap;">
+            ${isMe ? "You" : profile?.name?.split(" ")[0] || "?"}
+          </div>`;
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([loc.longitude, loc.latitude])
+          .addTo(mapRef.current);
+        markersRef.current[loc.user_id] = marker;
+      });
 
-      const marker = new mapboxgl.Marker({ element: el })
-        .setLngLat([loc.longitude, loc.latitude])
-        .addTo(map.current!);
+      meetupPoints.forEach((p) => {
+        const el = document.createElement("div");
+        el.innerHTML = `<div style="background:#F59E0B;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">📍</div>`;
+        new mapboxgl.Marker({ element: el })
+          .setLngLat([p.longitude, p.latitude])
+          .setPopup(new mapboxgl.Popup({ offset: 22 }).setText(p.title))
+          .addTo(mapRef.current);
+      });
 
-      markers.current[loc.user_id] = marker;
+      if (locations.length > 0) {
+        const bounds = new mapboxgl.LngLatBounds();
+        locations.forEach((l) => bounds.extend([l.longitude, l.latitude]));
+        meetupPoints.forEach((p) => bounds.extend([p.longitude, p.latitude]));
+        mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 16 });
+      }
     });
+  }, [locations, meetupPoints, memberProfiles, mapReady, currentUserId]);
 
-    meetupPoints.forEach((point) => {
-      const el = document.createElement("div");
-      el.innerHTML = `<div style="background:#F59E0B;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,0.25);">📍</div>`;
-
-      new mapboxgl.Marker({ element: el })
-        .setLngLat([point.longitude, point.latitude])
-        .setPopup(new mapboxgl.Popup({ offset: 20 }).setText(point.title))
-        .addTo(map.current!);
+  async function pushLocation(sharingUntil: string | null) {
+    return new Promise<void>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          await supabase.from("locations").upsert({
+            user_id: currentUserId,
+            trip_id: tripId,
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            sharing_enabled: true,
+            sharing_until: sharingUntil,
+            updated_at: new Date().toISOString(),
+          });
+          resolve();
+        },
+        (err) => {
+          setGeoError("Location access denied. Please allow it in browser settings.");
+          reject(err);
+        },
+        { enableHighAccuracy: false, timeout: 10000 }
+      );
     });
-
-    if (memberLocations.length > 0) {
-      const bounds = new mapboxgl.LngLatBounds();
-      memberLocations.forEach((loc) => bounds.extend([loc.longitude, loc.latitude]));
-      meetupPoints.forEach((p) => bounds.extend([p.longitude, p.latitude]));
-      map.current.fitBounds(bounds, { padding: 80, maxZoom: 15 });
-    }
-  }, [memberLocations, meetupPoints, memberProfiles]);
+  }
 
   async function startSharing(minutes: number) {
-    setShowDurationPicker(false);
-    setSharing(true);
-
-    const sharingUntil = minutes > 0
-      ? new Date(Date.now() + minutes * 60 * 1000).toISOString()
-      : null;
-
-    async function pushLocation() {
-      return new Promise<void>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          async (pos) => {
-            await supabase.from("locations").upsert({
-              user_id: currentUserId,
-              trip_id: tripId,
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              sharing_enabled: true,
-              sharing_until: sharingUntil,
-              updated_at: new Date().toISOString(),
-            });
-            resolve();
-          },
-          reject,
-          { enableHighAccuracy: false, timeout: 8000 }
-        );
-      });
-    }
-
-    await pushLocation();
-    locationInterval.current = setInterval(pushLocation, 40000);
-
-    if (minutes > 0) {
-      setTimeout(stopSharing, minutes * 60 * 1000);
-    }
+    setShowPicker(false);
+    setGeoError("");
+    const until = minutes > 0 ? new Date(Date.now() + minutes * 60 * 1000).toISOString() : null;
+    try {
+      await pushLocation(until);
+      setSharing(true);
+      intervalRef.current = setInterval(() => pushLocation(until), 40000);
+      if (minutes > 0) setTimeout(stopSharing, minutes * 60 * 1000);
+    } catch { /* geoError state already set */ }
   }
 
   async function stopSharing() {
     setSharing(false);
-    if (locationInterval.current) {
-      clearInterval(locationInterval.current);
-      locationInterval.current = null;
-    }
-    await supabase
-      .from("locations")
-      .update({ sharing_enabled: false })
-      .eq("user_id", currentUserId)
-      .eq("trip_id", tripId);
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    await supabase.from("locations").update({ sharing_enabled: false }).eq("user_id", currentUserId).eq("trip_id", tripId);
+    fetchLocations();
   }
 
   async function dropMeetupPoint() {
+    setGeoError("");
     navigator.geolocation.getCurrentPosition(async (pos) => {
       await supabase.from("meetup_points").insert({
         trip_id: tripId,
@@ -184,77 +194,166 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
         title: "Meet Here",
         active: true,
       });
-    });
+    }, () => setGeoError("Location access denied."));
+  }
+
+  // No Mapbox token — show a location-sharing only UI
+  if (!hasToken) {
+    return (
+      <div className="flex flex-col flex-1 bg-gray-50">
+        {/* Members currently sharing */}
+        <div className="px-4 pt-4 pb-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="h-4 w-4 text-indigo-500" />
+            <p className="text-sm font-semibold text-gray-700">
+              {locations.length > 0 ? `${locations.length} sharing location` : "No one sharing yet"}
+            </p>
+          </div>
+          {locations.length > 0 && (
+            <div className="space-y-2">
+              {locations.map((loc) => {
+                const profile = memberProfiles[loc.user_id];
+                const isMe = loc.user_id === currentUserId;
+                return (
+                  <div key={loc.user_id} className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
+                    <div className="h-9 w-9 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                      {getInitials(profile?.name)}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{isMe ? "You" : profile?.name}</p>
+                      <p className="text-xs text-gray-400 flex items-center gap-1">
+                        <Radio className="h-3 w-3 text-emerald-500" /> Live
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 flex items-center justify-center px-6 text-center">
+          <div>
+            <div className="h-20 w-20 rounded-3xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
+              <MapPin className="h-10 w-10 text-indigo-400" />
+            </div>
+            <p className="text-sm text-gray-400">Map requires a Mapbox token.<br />Add <code className="text-xs bg-gray-100 px-1 rounded">NEXT_PUBLIC_MAPBOX_TOKEN</code> to env vars.</p>
+          </div>
+        </div>
+
+        <ShareControls sharing={sharing} showPicker={showPicker} geoError={geoError}
+          onShare={() => setShowPicker(true)} onStop={stopSharing}
+          onPickDuration={startSharing} onDismissPicker={() => setShowPicker(false)}
+          onMeetup={dropMeetupPoint} />
+      </div>
+    );
   }
 
   return (
     <div className="relative flex-1 flex flex-col">
-      <div ref={mapContainer} className="flex-1 min-h-[calc(100vh-180px)]" />
+      <div ref={mapContainer} className="flex-1" style={{ minHeight: "calc(100vh - 160px)" }} />
+      <ShareControls sharing={sharing} showPicker={showPicker} geoError={geoError}
+        onShare={() => setShowPicker(true)} onStop={stopSharing}
+        onPickDuration={startSharing} onDismissPicker={() => setShowPicker(false)}
+        onMeetup={dropMeetupPoint} />
+    </div>
+  );
+}
 
-      <div className="absolute bottom-4 left-4 right-4 flex flex-col gap-2">
-        {memberLocations.length === 0 && !sharing && (
-          <div className="bg-white/90 backdrop-blur rounded-2xl px-4 py-3 text-sm text-gray-600 text-center shadow">
-            No one is sharing location yet
-          </div>
+function ShareControls({ sharing, showPicker, geoError, onShare, onStop, onPickDuration, onDismissPicker, onMeetup }: {
+  sharing: boolean;
+  showPicker: boolean;
+  geoError: string;
+  onShare: () => void;
+  onStop: () => void;
+  onPickDuration: (minutes: number) => void;
+  onDismissPicker: () => void;
+  onMeetup: () => void;
+}) {
+  return (
+    <div className="absolute bottom-4 left-4 right-4 space-y-2">
+      <AnimatePresence>
+        {geoError && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-xs text-red-600 text-center"
+          >
+            {geoError}
+          </motion.div>
         )}
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1 gap-1.5 bg-white/90 backdrop-blur shadow"
-            onClick={dropMeetupPoint}
+        {showPicker && (
+          <motion.div
+            key="picker"
+            initial={{ opacity: 0, y: 12, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.97 }}
+            className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 space-y-1"
           >
-            <MapPin className="h-4 w-4 text-amber-500" />
-            Drop meetup
-          </Button>
-
-          {sharing ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              className="flex-1 gap-1.5"
-              onClick={stopSharing}
-            >
-              <X className="h-4 w-4" />
-              Stop sharing
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              className="flex-1 gap-1.5"
-              onClick={() => setShowDurationPicker(true)}
-            >
-              <Navigation className="h-4 w-4" />
-              Share location
-            </Button>
-          )}
-        </div>
-
-        {showDurationPicker && (
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 space-y-2">
-            <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
-              Share for how long?
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-indigo-500" />Share for how long?
             </p>
             {SHARE_DURATIONS.map(({ label, minutes }) => (
-              <button
+              <motion.button
                 key={label}
-                onClick={() => startSharing(minutes)}
-                className="w-full text-left px-4 py-2.5 rounded-xl text-sm hover:bg-indigo-50 text-gray-800 font-medium transition-colors"
+                whileTap={{ scale: 0.97 }}
+                onClick={() => onPickDuration(minutes)}
+                className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-gray-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
               >
                 {label}
-              </button>
+              </motion.button>
             ))}
-            <button
-              onClick={() => setShowDurationPicker(false)}
-              className="w-full text-center text-sm text-gray-400 py-1"
-            >
-              Cancel
-            </button>
-          </div>
+            <button onClick={onDismissPicker} className="w-full text-center text-xs text-gray-400 pt-1">Cancel</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex gap-2">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onMeetup}
+          className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl bg-white/90 backdrop-blur border border-gray-200 text-sm font-semibold text-gray-700 shadow-sm"
+        >
+          <MapPin className="h-4 w-4 text-amber-500" />
+          Drop Pin
+        </motion.button>
+
+        {sharing ? (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onStop}
+            className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl bg-red-500 text-white text-sm font-bold shadow-md"
+          >
+            <X className="h-4 w-4" />
+            Stop Sharing
+          </motion.button>
+        ) : (
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={onShare}
+            className="flex-1 flex items-center justify-center gap-1.5 h-11 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-md shadow-indigo-200"
+          >
+            <Navigation className="h-4 w-4" />
+            Share Location
+          </motion.button>
         )}
       </div>
+
+      {sharing && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex items-center justify-center gap-1.5 py-1"
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <p className="text-xs text-gray-500 font-medium">Broadcasting your location</p>
+        </motion.div>
+      )}
     </div>
   );
 }

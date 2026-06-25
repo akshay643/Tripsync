@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { Label } from "@/components/ui/label";
@@ -8,7 +9,15 @@ import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 type Mode = "signin" | "signup";
 
+function getNextUrl(): string {
+  if (typeof window === "undefined") return "/trips";
+  const next = new URLSearchParams(window.location.search).get("next") ?? "";
+  // Only allow relative paths to prevent open redirect
+  return next.startsWith("/") ? next : "/trips";
+}
+
 export function LoginForm() {
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("signin");
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
@@ -39,8 +48,8 @@ export function LoginForm() {
 
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) { setError(error.message); setLoading(false); }
-      // on success Next.js router will redirect via proxy
+      if (error) { setError(error.message); setLoading(false); return; }
+      router.push(getNextUrl());
     } else {
       const { error } = await supabase.auth.signUp({
         email,
