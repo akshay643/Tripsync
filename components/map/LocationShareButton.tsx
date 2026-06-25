@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navigation, X, Clock, Radio } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +22,37 @@ export function LocationShareButton({ tripId, currentUserId }: Props) {
   const [sharing, setSharing] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [error, setError] = useState("");
+
+  // Restore sharing state on mount (so navigating away + back keeps the button active)
+  useEffect(() => {
+    let mounted = true;
+    supabase
+      .from("locations")
+      .select("sharing_enabled, sharing_until")
+      .eq("user_id", currentUserId)
+      .eq("trip_id", tripId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!mounted || !data?.sharing_enabled) return;
+        const active = !data.sharing_until || new Date(data.sharing_until) > new Date();
+        if (active) {
+          setSharing(true);
+          const until = data.sharing_until;
+          intervalRef.current = setInterval(() => pushLocation(until), 40000);
+          if (until) {
+            const rem = new Date(until).getTime() - Date.now();
+            if (rem > 0) setTimeout(() => stop(), rem);
+          }
+        } else {
+          supabase.from("locations").update({ sharing_enabled: false })
+            .eq("user_id", currentUserId).eq("trip_id", tripId);
+        }
+      });
+    return () => {
+      mounted = false;
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [tripId, currentUserId]);
 
   async function pushLocation(until: string | null) {
     return new Promise<void>((resolve, reject) => {

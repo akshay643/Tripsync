@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Map, Receipt, Luggage, User } from "lucide-react";
+import { Map, Luggage, User, Compass, Bell } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/trips", label: "Trips", icon: Luggage },
-  { href: "/map", label: "Map", icon: Map },
-  { href: "/expenses", label: "Expenses", icon: Receipt },
-  { href: "/profile", label: "Profile", icon: User },
+  { href: "/trips",         label: "Trips",   icon: Luggage },
+  { href: "/explore",       label: "Explore", icon: Compass },
+  { href: "/map",           label: "Map",     icon: Map     },
+  { href: "/notifications", label: "Alerts",  icon: Bell    },
+  { href: "/profile",       label: "Profile", icon: User    },
 ];
 
 export function BottomNav() {
@@ -25,7 +26,7 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className="relative flex flex-col items-center gap-0.5 px-5 py-1 min-w-15"
+              className="relative flex flex-col items-center gap-0.5 px-2 py-1 min-w-0 flex-1"
             >
               {active && (
                 <motion.div
@@ -40,7 +41,7 @@ export function BottomNav() {
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
               >
                 <Icon
-                  className={cn("h-5.5 w-5.5 transition-colors", active ? "text-indigo-600" : "text-gray-400")}
+                  className={cn("h-5 w-5 transition-colors", active ? "text-indigo-600" : "text-gray-400")}
                   strokeWidth={active ? 2.5 : 1.8}
                 />
               </motion.div>
