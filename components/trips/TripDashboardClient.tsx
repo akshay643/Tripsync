@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency, formatShortDate, getInitials } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/components/ui/motion";
 import {
-  Map, Receipt, Users, Calendar, ArrowRightLeft, MapPin, Wallet,
-  Plane, Clock, TrendingUp,
+  Map, Receipt, Users, Calendar, ArrowRightLeft, MapPin,
+  Plus, Clock, ChevronRight, Plane,
 } from "lucide-react";
 import { LocationShareButton } from "@/components/map/LocationShareButton";
 
@@ -20,165 +19,206 @@ interface Props {
   currentUserId: string;
 }
 
-const navCards = (tripId: string) => [
-  { href: `/trips/${tripId}/expenses`, icon: Receipt, label: "Expenses", sub: "Split bills", bg: "bg-emerald-50", text: "text-emerald-600", badge: null },
-  { href: `/trips/${tripId}/settlements`, icon: ArrowRightLeft, label: "Settle Up", sub: "Clear debts", bg: "bg-orange-50", text: "text-orange-600", badge: null },
-  { href: `/trips/${tripId}/itinerary`, icon: Calendar, label: "Itinerary", sub: "Day by day", bg: "bg-purple-50", text: "text-purple-600", badge: null },
-  { href: `/trips/${tripId}/map`, icon: Map, label: "Live Map", sub: "Track everyone", bg: "bg-blue-50", text: "text-blue-600", badge: null },
-  { href: `/trips/${tripId}/members`, icon: Users, label: "Members", sub: "Who's in", bg: "bg-pink-50", text: "text-pink-600", badge: null },
-];
-
-function getDaysLeft(endDate?: string): { label: string; value: number | null; status: "future" | "ongoing" | "past" } {
-  if (!endDate) return { label: "", value: null, status: "future" };
-  const end = new Date(endDate);
+function getDaysInfo(startDate?: string, endDate?: string) {
   const now = new Date();
-  const diff = Math.ceil((end.getTime() - now.getTime()) / 864e5);
-  if (diff < 0) return { label: "Trip ended", value: null, status: "past" };
-  if (diff === 0) return { label: "Last day!", value: 0, status: "ongoing" };
-  return { label: `${diff} days left`, value: diff, status: "future" };
+  if (!endDate && !startDate) return { text: "Plan your adventure", tag: "upcoming", daysNum: null };
+
+  if (endDate) {
+    const end = new Date(endDate);
+    const start = startDate ? new Date(startDate) : null;
+    if (start && now < start) {
+      const d = Math.ceil((start.getTime() - now.getTime()) / 864e5);
+      return { text: `Starts in ${d}d`, tag: "upcoming", daysNum: d };
+    }
+    const diff = Math.ceil((end.getTime() - now.getTime()) / 864e5);
+    if (diff < 0) return { text: "Completed", tag: "past", daysNum: null };
+    if (diff === 0) return { text: "Last day!", tag: "ongoing", daysNum: 0 };
+    return { text: `${diff} days left`, tag: "ongoing", daysNum: diff };
+  }
+  if (startDate) {
+    const start = new Date(startDate);
+    const d = Math.ceil((start.getTime() - now.getTime()) / 864e5);
+    if (d > 0) return { text: `Starts in ${d}d`, tag: "upcoming", daysNum: d };
+    return { text: "In progress", tag: "ongoing", daysNum: null };
+  }
+  return { text: "", tag: "upcoming", daysNum: null };
 }
+
+const TAG_PILL: Record<string, string> = {
+  upcoming: "bg-amber-400/25 text-amber-100",
+  ongoing: "bg-emerald-400/25 text-emerald-100",
+  past: "bg-white/10 text-white/50",
+};
+
+const NAV = (id: string) => [
+  { href: `/trips/${id}/expenses`, icon: Receipt, label: "Expenses", sub: "Split bills", bg: "bg-emerald-50", text: "text-emerald-600" },
+  { href: `/trips/${id}/settlements`, icon: ArrowRightLeft, label: "Settle Up", sub: "Clear debts", bg: "bg-orange-50", text: "text-orange-600" },
+  { href: `/trips/${id}/itinerary`, icon: Calendar, label: "Itinerary", sub: "Day by day", bg: "bg-purple-50", text: "text-purple-600" },
+  { href: `/trips/${id}/map`, icon: Map, label: "Live Map", sub: "Track everyone", bg: "bg-blue-50", text: "text-blue-600" },
+  { href: `/trips/${id}/members`, icon: Users, label: "Members", sub: "Who's in", bg: "bg-pink-50", text: "text-pink-600" },
+];
 
 export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, currentUserId }: Props) {
   const budgetPct = trip.budget ? Math.min((totalSpend / trip.budget) * 100, 100) : 0;
   const overBudget = budgetPct >= 100;
-  const countdown = getDaysLeft(trip.end_date);
+  const countdown = getDaysInfo(trip.start_date, trip.end_date);
+
+  // Unsplash featured photo by destination — loaded as CSS bg, no next/image config needed
+  const photoQuery = encodeURIComponent((trip.destination || "travel adventure") + " city landscape");
+  const photoBg = `url(https://source.unsplash.com/featured/900x600/?${photoQuery})`;
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* Hero */}
-      <div className="relative bg-linear-to-br from-indigo-600 via-violet-600 to-purple-700 px-5 pt-4 pb-16 overflow-hidden">
-        {/* Decorative circles */}
-        <div className="absolute -top-12 -right-12 h-48 w-48 rounded-full bg-white/5" />
-        <div className="absolute -bottom-8 -left-8 h-36 w-36 rounded-full bg-white/5" />
 
-        {/* Destination + countdown row */}
-        <div className="relative flex items-start justify-between mb-5">
-          <div>
-            {trip.destination ? (
-              <p className="text-indigo-200 text-sm flex items-center gap-1 font-medium">
-                <MapPin className="h-3.5 w-3.5" />{trip.destination}
-              </p>
-            ) : (
-              <p className="text-indigo-300 text-sm flex items-center gap-1">
-                <Plane className="h-3.5 w-3.5" />Adventure awaits
-              </p>
+      {/* ── Hero with destination photo ── */}
+      <div
+        className="relative h-64 bg-linear-to-br from-indigo-600 via-violet-600 to-purple-700"
+        style={{ backgroundImage: photoBg, backgroundSize: "cover", backgroundPosition: "center" }}
+      >
+        {/* Always-on gradient scrim so text stays readable */}
+        <div className="absolute inset-0 bg-linear-to-b from-black/50 via-black/20 to-black/65" />
+
+        <div className="relative h-full flex flex-col justify-between px-5 pt-3 pb-5">
+          {/* Top row */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 bg-black/25 backdrop-blur-sm rounded-full px-3 py-1.5">
+              {trip.destination
+                ? <><MapPin className="h-3 w-3 text-white/80" /><span className="text-white text-xs font-medium">{trip.destination}</span></>
+                : <><Plane className="h-3 w-3 text-white/80" /><span className="text-white text-xs font-medium">Adventure awaits</span></>
+              }
+            </div>
+            {countdown.text && (
+              <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${TAG_PILL[countdown.tag]}`}>
+                {countdown.text}
+              </span>
             )}
+          </div>
+
+          {/* Bottom section */}
+          <div>
             {trip.start_date && (
-              <p className="text-white/60 text-xs mt-1 flex items-center gap-1">
+              <p className="text-white/70 text-xs flex items-center gap-1 mb-2.5">
                 <Clock className="h-3 w-3" />
                 {formatShortDate(trip.start_date)}
                 {trip.end_date && ` → ${formatShortDate(trip.end_date)}`}
               </p>
             )}
+            <div className="flex items-center justify-between">
+              {/* Member avatars */}
+              <div className="flex items-center gap-2">
+                <div className="flex -space-x-2">
+                  {trip.trip_members.slice(0, 5).map((m: any) => (
+                    <Avatar key={m.user_id} className="h-8 w-8 border-2 border-white/40">
+                      <AvatarImage src={m.profiles?.avatar} />
+                      <AvatarFallback className="text-xs bg-indigo-500 text-white font-semibold">
+                        {getInitials(m.profiles?.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  ))}
+                  {trip.trip_members.length > 5 && (
+                    <div className="h-8 w-8 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center">
+                      <span className="text-[10px] text-white font-bold">+{trip.trip_members.length - 5}</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-white/75 text-xs">
+                  {trip.trip_members.length} traveller{trip.trip_members.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+              <LocationShareButton tripId={tripId} currentUserId={currentUserId} />
+            </div>
           </div>
-          {countdown.value !== null && (
-            <div className="text-right">
-              <p className={`text-2xl font-black ${countdown.status === "past" ? "text-gray-300" : "text-white"}`}>
-                {countdown.value}
+        </div>
+      </div>
+      {/* ─────────────────────────────── */}
+
+      <div className="px-4 space-y-3 pt-4 pb-8">
+
+        {/* Stat strip */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 grid grid-cols-3 divide-x divide-gray-100">
+          <div className="py-3 text-center">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Spent</p>
+            <p className="text-lg font-black text-gray-900 mt-0.5">{formatCurrency(totalSpend)}</p>
+            <p className="text-[10px] text-gray-400">{expenseCount} expense{expenseCount !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="py-3 text-center">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Budget</p>
+            <p className="text-lg font-black text-gray-900 mt-0.5">{trip.budget ? formatCurrency(trip.budget) : "—"}</p>
+            {trip.budget ? (
+              <p className={`text-[10px] font-semibold ${overBudget ? "text-red-500" : "text-emerald-500"}`}>
+                {overBudget ? "Over budget" : `${Math.round(100 - budgetPct)}% left`}
               </p>
-              <p className="text-indigo-200 text-[10px] font-semibold uppercase tracking-wider">days left</p>
-            </div>
-          )}
-          {countdown.status === "past" && (
-            <div className="bg-white/10 rounded-xl px-3 py-1.5">
-              <p className="text-white text-xs font-semibold">Trip ended</p>
-            </div>
-          )}
+            ) : <p className="text-[10px] text-gray-400">not set</p>}
+          </div>
+          <div className="py-3 text-center">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Days</p>
+            <p className="text-lg font-black text-gray-900 mt-0.5">
+              {countdown.daysNum !== null ? countdown.daysNum : "—"}
+            </p>
+            <p className="text-[10px] text-gray-400">
+              {countdown.tag === "ongoing" ? "remaining" : countdown.tag === "upcoming" ? "to go" : "completed"}
+            </p>
+          </div>
         </div>
 
-        {/* Budget bar */}
-        {trip.budget ? (
-          <div className="relative bg-white/10 rounded-2xl p-4 mb-4 backdrop-blur">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <p className="text-indigo-200 text-xs font-medium">Spent</p>
-                <p className="text-white text-xl font-black">{formatCurrency(totalSpend)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-indigo-200 text-xs font-medium">Budget</p>
-                <p className="text-white text-xl font-black">{formatCurrency(trip.budget)}</p>
-              </div>
-            </div>
-            <div className="relative h-2 bg-white/20 rounded-full overflow-hidden">
+        {/* Budget progress bar */}
+        {trip.budget && (
+          <div className="flex items-center gap-2.5 px-1">
+            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${budgetPct}%` }}
-                transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
-                className={`absolute h-full rounded-full ${overBudget ? "bg-red-400" : budgetPct > 75 ? "bg-amber-400" : "bg-emerald-400"}`}
+                transition={{ duration: 0.9, delay: 0.15, ease: "easeOut" }}
+                className={`h-full rounded-full ${overBudget ? "bg-red-400" : budgetPct > 75 ? "bg-amber-400" : "bg-emerald-400"}`}
               />
             </div>
-            <div className="flex justify-between mt-1.5">
-              <p className="text-indigo-300 text-xs">{expenseCount} expenses</p>
-              <p className={`text-xs font-semibold ${overBudget ? "text-red-400" : "text-emerald-400"}`}>
-                {overBudget ? "Over budget!" : `${Math.round(100 - budgetPct)}% remaining`}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="relative bg-white/10 rounded-2xl p-4 mb-4 backdrop-blur flex items-center justify-between">
-            <div>
-              <p className="text-indigo-200 text-xs font-medium">Total spent</p>
-              <p className="text-white text-xl font-black">{formatCurrency(totalSpend)}</p>
-              <p className="text-indigo-300 text-xs mt-0.5">{expenseCount} expenses</p>
-            </div>
-            <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center">
-              <TrendingUp className="h-6 w-6 text-indigo-200" />
-            </div>
+            <p className="text-[11px] text-gray-400 font-medium w-8 text-right">{Math.round(budgetPct)}%</p>
           </div>
         )}
 
-        {/* Members + share location */}
-        <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex -space-x-2.5">
-              {trip.trip_members.slice(0, 5).map((m: any) => (
-                <Avatar key={m.user_id} className="h-8 w-8 border-2 border-indigo-600 ring-1 ring-white/20">
-                  <AvatarImage src={m.profiles?.avatar} />
-                  <AvatarFallback className="text-xs bg-indigo-400 text-white font-semibold">
-                    {getInitials(m.profiles?.name)}
-                  </AvatarFallback>
-                </Avatar>
-              ))}
-              {trip.trip_members.length > 5 && (
-                <div className="h-8 w-8 rounded-full bg-white/20 border-2 border-indigo-600 flex items-center justify-center">
-                  <span className="text-[10px] text-white font-bold">+{trip.trip_members.length - 5}</span>
-                </div>
-              )}
+        {/* Quick action — Add expense */}
+        <Link href={`/trips/${tripId}/expenses/new`}>
+          <motion.div
+            whileTap={{ scale: 0.98 }}
+            className="flex items-center gap-3 bg-indigo-600 rounded-2xl px-4 py-3.5 shadow-md shadow-indigo-200/60"
+          >
+            <div className="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <Plus className="h-5 w-5 text-white" strokeWidth={2.5} />
             </div>
-            <p className="text-indigo-200 text-xs">
-              {trip.trip_members.length} traveller{trip.trip_members.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-          <LocationShareButton tripId={tripId} currentUserId={currentUserId} />
-        </div>
-      </div>
-
-      {/* Nav cards grid */}
-      <motion.div
-        variants={staggerContainer}
-        initial="initial"
-        animate="animate"
-        className="px-4 -mt-8 pb-8 grid grid-cols-2 gap-3"
-      >
-        {navCards(tripId).map(({ href, icon: Icon, label, sub, bg, text }) => (
-          <motion.div key={href} variants={staggerItem}>
-            <Link href={href}>
-              <motion.div
-                whileHover={{ y: -3 }}
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm active:shadow-none transition-shadow"
-              >
-                <div className={`h-11 w-11 rounded-2xl ${bg} flex items-center justify-center mb-3`}>
-                  <Icon className={`h-5 w-5 ${text}`} strokeWidth={2} />
-                </div>
-                <p className="text-sm font-bold text-gray-900">{label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
-              </motion.div>
-            </Link>
+            <div className="flex-1">
+              <p className="text-white font-bold text-sm">Add Expense</p>
+              <p className="text-indigo-200 text-xs">Split it with the group</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-white/40" />
           </motion.div>
-        ))}
-      </motion.div>
+        </Link>
+
+        {/* Nav grid */}
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="grid grid-cols-2 gap-3"
+        >
+          {NAV(tripId).map(({ href, icon: Icon, label, sub, bg, text }) => (
+            <motion.div key={href} variants={staggerItem}>
+              <Link href={href}>
+                <motion.div
+                  whileTap={{ scale: 0.96 }}
+                  className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm"
+                >
+                  <div className={`h-10 w-10 rounded-xl ${bg} flex items-center justify-center mb-3`}>
+                    <Icon className={`h-5 w-5 ${text}`} strokeWidth={2} />
+                  </div>
+                  <p className="text-sm font-bold text-gray-900">{label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
+                </motion.div>
+              </Link>
+            </motion.div>
+          ))}
+        </motion.div>
+
+      </div>
     </div>
   );
 }
