@@ -1,13 +1,12 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
 import { formatCurrency, CATEGORY_ICONS, CATEGORY_LABELS } from "@/lib/utils";
 import { Receipt } from "lucide-react";
 
 export default async function ExpensesOverviewPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerUser();
 
   // Get trips the user is in
   const { data: memberRows } = await supabase

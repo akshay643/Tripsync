@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
@@ -14,8 +14,7 @@ export default async function ExpensesPage({
   params: Promise<{ tripId: string }>;
 }) {
   const { tripId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerUser();
 
   const { data: trip } = await supabase
     .from("trips")

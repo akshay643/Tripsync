@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { TopBar } from "@/components/layout/TopBar";
@@ -8,8 +8,7 @@ import { motion } from "framer-motion";
 import { staggerContainer, staggerItem } from "@/components/ui/motion";
 
 export default async function MapPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerUser();
 
   const { data: memberships } = await supabase
     .from("trip_members")

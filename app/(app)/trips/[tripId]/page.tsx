@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { InviteSheet } from "@/components/trips/InviteSheet";
@@ -11,11 +11,10 @@ export default async function TripDashboardPage({
   params: Promise<{ tripId: string }>;
 }) {
   const { tripId } = await params;
-  const supabase = await createClient();
+  const { supabase, user } = await getServerUser();
 
-  // All three fetches in parallel
-  const [{ data: { user } }, { data: trip }, { data: expenses }] = await Promise.all([
-    supabase.auth.getUser(),
+  // DB queries in parallel (auth already resolved via cookie above)
+  const [{ data: trip }, { data: expenses }] = await Promise.all([
     supabase.from("trips").select("*, trip_members(*, profiles(*))").eq("id", tripId).single(),
     supabase.from("expenses").select("amount").eq("trip_id", tripId),
   ]);

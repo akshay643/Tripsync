@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettlementList } from "@/components/settlements/SettlementList";
@@ -11,8 +11,7 @@ export default async function SettlementsPage({
   params: Promise<{ tripId: string }>;
 }) {
   const { tripId } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerUser();
 
   const { data: trip } = await supabase
     .from("trips")

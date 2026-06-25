@@ -23,3 +23,11 @@ export async function createClient() {
     }
   );
 }
+
+// Reads session from cookie — no Supabase Auth network call.
+// Safe because proxy.ts already validates auth on every request.
+export async function getServerUser() {
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  return { supabase, user: session?.user ?? null };
+}

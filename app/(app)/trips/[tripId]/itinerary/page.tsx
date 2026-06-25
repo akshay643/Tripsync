@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { ItineraryView } from "@/components/itinerary/ItineraryView";
@@ -10,13 +10,13 @@ export default async function ItineraryPage({
   params: Promise<{ tripId: string }>;
 }) {
   const { tripId } = await params;
-  const supabase = await createClient();
+  const { supabase, user } = await getServerUser();
 
-  // Parallel fetch — user + trip at the same time
-  const [{ data: { user } }, { data: trip }] = await Promise.all([
-    supabase.auth.getUser(),
-    supabase.from("trips").select("title, start_date, end_date, trip_members(user_id)").eq("id", tripId).single(),
-  ]);
+  const { data: trip } = await supabase
+    .from("trips")
+    .select("title, start_date, end_date, trip_members(user_id)")
+    .eq("id", tripId)
+    .single();
 
   if (!trip) notFound();
   const isMember = trip.trip_members.some((m: any) => m.user_id === user?.id);

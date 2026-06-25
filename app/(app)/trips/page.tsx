@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic";
-import { createClient } from "@/lib/supabase/server";
+import { getServerUser } from "@/lib/supabase/server";
 import Link from "next/link";
 import { TripCard } from "@/components/trips/TripCard";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,7 @@ import { Plus, Plane } from "lucide-react";
 import type { TripWithMembers } from "@/types";
 
 export default async function TripsPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { supabase, user } = await getServerUser();
 
   const { data: memberRows } = await supabase
     .from("trip_members")

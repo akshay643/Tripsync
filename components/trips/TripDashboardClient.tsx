@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCurrency, formatShortDate, getInitials } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/components/ui/motion";
 import {
   Map, Receipt, Users, Calendar, ArrowRightLeft, MapPin,
-  Plus, Clock, ChevronRight, Plane,
+  Plus, Clock, ChevronRight, Plane, Camera, Loader2,
 } from "lucide-react";
 import { LocationShareButton } from "@/components/map/LocationShareButton";
+import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   trip: any;
@@ -22,7 +24,6 @@ interface Props {
 function getDaysInfo(startDate?: string, endDate?: string) {
   const now = new Date();
   if (!endDate && !startDate) return { text: "Plan your adventure", tag: "upcoming", daysNum: null };
-
   if (endDate) {
     const end = new Date(endDate);
     const start = startDate ? new Date(startDate) : null;
@@ -59,24 +60,69 @@ const NAV = (id: string) => [
 ];
 
 export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, currentUserId }: Props) {
+  const supabase = createClient();
+  const coverRef = useRef<HTMLInputElement>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  // Local cover URL so update is instant without page reload
+  const [coverUrl, setCoverUrl] = useState<string | null>(
+    trip.trip_image ?? null
+  );
+
   const budgetPct = trip.budget ? Math.min((totalSpend / trip.budget) * 100, 100) : 0;
   const overBudget = budgetPct >= 100;
   const countdown = getDaysInfo(trip.start_date, trip.end_date);
 
-  // Unsplash featured photo by destination — loaded as CSS bg, no next/image config needed
-  const photoQuery = encodeURIComponent((trip.destination || "travel adventure") + " city landscape");
-  const photoBg = `url(https://source.unsplash.com/featured/900x600/?${photoQuery})`;
+  // Fallback: Unsplash photo based on destination (shown only if no user-uploaded cover)
+  const unsplashQuery = encodeURIComponent((trip.destination || "travel adventure") + " city landscape");
+  const heroBg = coverUrl
+    ? coverUrl
+    : `https://source.unsplash.com/featured/900x600/?${unsplashQuery}`;
+
+  async function handleCoverUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingCover(true);
+    try {
+      const ext = file.name.split(".").pop() ?? "jpg";
+      const path = `${tripId}/cover.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("trip-covers")
+        .upload(path, file, { upsert: true, contentType: file.type });
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from("trip-covers").getPublicUrl(path);
+      const url = `${publicUrl}?t=${Date.now()}`;
+
+      await supabase.from("trips").update({ trip_image: url }).eq("id", tripId);
+      setCoverUrl(url);
+    } catch (err) {
+      console.error("Cover upload failed", err);
+    } finally {
+      setUploadingCover(false);
+      if (coverRef.current) coverRef.current.value = "";
+    }
+  }
 
   return (
     <div className="bg-gray-50 min-h-screen">
 
-      {/* ── Hero with destination photo ── */}
+      {/* ── Hero with cover photo ── */}
       <div
         className="relative h-64 bg-linear-to-br from-indigo-600 via-violet-600 to-purple-700"
-        style={{ backgroundImage: photoBg, backgroundSize: "cover", backgroundPosition: "center" }}
+        style={{ backgroundImage: `url(${heroBg})`, backgroundSize: "cover", backgroundPosition: "center" }}
       >
-        {/* Always-on gradient scrim so text stays readable */}
+        {/* Dark scrim */}
         <div className="absolute inset-0 bg-linear-to-b from-black/50 via-black/20 to-black/65" />
+
+        {/* Hidden file input */}
+        <input
+          ref={coverRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={handleCoverUpload}
+        />
 
         <div className="relative h-full flex flex-col justify-between px-5 pt-3 pb-5">
           {/* Top row */}
@@ -87,14 +133,27 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
                 : <><Plane className="h-3 w-3 text-white/80" /><span className="text-white text-xs font-medium">Adventure awaits</span></>
               }
             </div>
-            {countdown.text && (
-              <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${TAG_PILL[countdown.tag]}`}>
-                {countdown.text}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {countdown.text && (
+                <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${TAG_PILL[countdown.tag]}`}>
+                  {countdown.text}
+                </span>
+              )}
+              {/* Change cover photo button */}
+              <button
+                onClick={() => coverRef.current?.click()}
+                disabled={uploadingCover}
+                className="h-8 w-8 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center"
+              >
+                {uploadingCover
+                  ? <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                  : <Camera className="h-3.5 w-3.5 text-white" />
+                }
+              </button>
+            </div>
           </div>
 
-          {/* Bottom section */}
+          {/* Bottom */}
           <div>
             {trip.start_date && (
               <p className="text-white/70 text-xs flex items-center gap-1 mb-2.5">
@@ -104,7 +163,6 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
               </p>
             )}
             <div className="flex items-center justify-between">
-              {/* Member avatars */}
               <div className="flex items-center gap-2">
                 <div className="flex -space-x-2">
                   {trip.trip_members.slice(0, 5).map((m: any) => (
@@ -130,7 +188,6 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
           </div>
         </div>
       </div>
-      {/* ─────────────────────────────── */}
 
       <div className="px-4 space-y-3 pt-4 pb-8">
 
@@ -144,17 +201,16 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
           <div className="py-3 text-center">
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Budget</p>
             <p className="text-lg font-black text-gray-900 mt-0.5">{trip.budget ? formatCurrency(trip.budget) : "—"}</p>
-            {trip.budget ? (
-              <p className={`text-[10px] font-semibold ${overBudget ? "text-red-500" : "text-emerald-500"}`}>
-                {overBudget ? "Over budget" : `${Math.round(100 - budgetPct)}% left`}
-              </p>
-            ) : <p className="text-[10px] text-gray-400">not set</p>}
+            {trip.budget
+              ? <p className={`text-[10px] font-semibold ${overBudget ? "text-red-500" : "text-emerald-500"}`}>
+                  {overBudget ? "Over budget" : `${Math.round(100 - budgetPct)}% left`}
+                </p>
+              : <p className="text-[10px] text-gray-400">not set</p>
+            }
           </div>
           <div className="py-3 text-center">
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Days</p>
-            <p className="text-lg font-black text-gray-900 mt-0.5">
-              {countdown.daysNum !== null ? countdown.daysNum : "—"}
-            </p>
+            <p className="text-lg font-black text-gray-900 mt-0.5">{countdown.daysNum !== null ? countdown.daysNum : "—"}</p>
             <p className="text-[10px] text-gray-400">
               {countdown.tag === "ongoing" ? "remaining" : countdown.tag === "upcoming" ? "to go" : "completed"}
             </p>
