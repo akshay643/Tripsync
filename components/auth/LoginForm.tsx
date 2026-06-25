@@ -3,23 +3,23 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Mail, ArrowLeft } from "lucide-react";
+import { Loader2, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
-type Step = "idle" | "email" | "otp_sent" | "loading";
+type Mode = "signin" | "signup";
 
 export function LoginForm() {
-  const [step, setStep] = useState<Step>("idle");
-  const loading = step === "loading";
+  const [mode, setMode] = useState<Mode>("signin");
+  const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const supabase = createClient();
 
   async function handleGoogleLogin() {
-    setStep("loading");
+    setLoading(true);
     setError("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -27,29 +27,36 @@ export function LoginForm() {
         redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/api/auth/callback`,
       },
     });
-    if (error) { setError(error.message); setStep("idle"); }
+    if (error) { setError(error.message); setLoading(false); }
   }
 
-  async function handleEmailOTP() {
-    if (!email) return;
-    setStep("loading");
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !password) return;
+    setLoading(true);
     setError("");
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/api/auth/callback`,
-      },
-    });
-    if (error) { setError(error.message); setStep("email"); }
-    else setStep("otp_sent");
-  }
+    setSuccess("");
 
-  async function handleVerifyOTP() {
-    if (!otp) return;
-    setStep("loading");
-    setError("");
-    const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: "email" });
-    if (error) { setError(error.message); setStep("otp_sent"); }
+    if (mode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) { setError(error.message); setLoading(false); }
+      // on success Next.js router will redirect via proxy
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin}/api/auth/callback`,
+        },
+      });
+      if (error) {
+        setError(error.message);
+      } else {
+        setSuccess("Account created! Check your email to confirm, then sign in.");
+        setMode("signin");
+      }
+      setLoading(false);
+    }
   }
 
   return (
@@ -79,87 +86,115 @@ export function LoginForm() {
         <div className="h-px flex-1 bg-white/20" />
       </div>
 
-      <AnimatePresence mode="wait">
-        {step !== "otp_sent" ? (
-          <motion.div
-            key="email-step"
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -12 }}
-            className="space-y-3"
+      {/* Mode toggle */}
+      <div className="relative flex bg-white/10 rounded-xl p-1">
+        {(["signin", "signup"] as Mode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => { setMode(m); setError(""); setSuccess(""); }}
+            className={`relative flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors z-10 ${
+              mode === m ? "text-white" : "text-indigo-300"
+            }`}
           >
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-indigo-200 text-xs">Email address</Label>
+            {mode === m && (
+              <motion.div
+                layoutId="auth-mode-pill"
+                className="absolute inset-0 bg-indigo-500 rounded-lg"
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+            )}
+            <span className="relative">{m === "signin" ? "Sign In" : "Create Account"}</span>
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="wait">
+        <motion.form
+          key={mode}
+          onSubmit={handleSubmit}
+          initial={{ opacity: 0, x: mode === "signin" ? -10 : 10 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0 }}
+          className="space-y-3"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="email" className="text-indigo-200 text-xs">Email address</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-300/60" />
               <input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleEmailOTP()}
                 disabled={loading}
-                className="flex h-11 w-full rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-indigo-300/60 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent disabled:opacity-50 backdrop-blur"
+                required
+                className="flex h-11 w-full rounded-xl border border-white/20 bg-white/10 pl-10 pr-4 py-2 text-sm text-white placeholder:text-indigo-300/60 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent disabled:opacity-50 backdrop-blur"
               />
             </div>
-            <motion.button
-              onClick={handleEmailOTP}
-              disabled={loading || !email}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full h-11 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-              Send Magic Code
-            </motion.button>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="otp-step"
-            initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 12 }}
-            className="space-y-3"
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-indigo-200 text-xs">Password</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-300/60" />
+              <input
+                id="password"
+                type={showPw ? "text" : "password"}
+                placeholder={mode === "signup" ? "Min 6 characters" : "Your password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+                minLength={6}
+                className="flex h-11 w-full rounded-xl border border-white/20 bg-white/10 pl-10 pr-10 py-2 text-sm text-white placeholder:text-indigo-300/60 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent disabled:opacity-50 backdrop-blur"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-300/60 hover:text-indigo-200"
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <motion.button
+            type="submit"
+            disabled={loading || !email || !password}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full h-11 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
           >
-            <p className="text-xs text-indigo-200 text-center">
-              Code sent to <span className="font-semibold text-white">{email}</span>
-            </p>
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="000000"
-              maxLength={6}
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              onKeyDown={(e) => e.key === "Enter" && handleVerifyOTP()}
-              disabled={loading}
-              autoFocus
-              className="flex h-14 w-full rounded-xl border border-white/20 bg-white/10 px-4 text-center text-2xl font-bold tracking-[0.4em] text-white placeholder:text-indigo-300/40 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50 backdrop-blur"
-            />
-            <motion.button
-              onClick={handleVerifyOTP}
-              disabled={loading || otp.length < 6}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full h-11 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & Sign In"}
-            </motion.button>
-            <button onClick={() => setStep("idle")} className="w-full text-xs text-indigo-300 flex items-center justify-center gap-1 py-1">
-              <ArrowLeft className="h-3 w-3" /> Use different email
-            </button>
-          </motion.div>
-        )}
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {mode === "signin" ? "Sign In" : "Create Account"}
+          </motion.button>
+        </motion.form>
       </AnimatePresence>
 
-      {error && (
-        <motion.p
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xs text-red-400 text-center"
-        >
-          {error}
-        </motion.p>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="text-xs text-red-400 text-center"
+          >
+            {error}
+          </motion.p>
+        )}
+        {success && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="text-xs text-emerald-400 text-center"
+          >
+            {success}
+          </motion.p>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
