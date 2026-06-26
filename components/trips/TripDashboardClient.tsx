@@ -63,6 +63,7 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
   const supabase = createClient();
   const coverRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverError, setCoverError] = useState("");
 
   // Local cover URL so update is instant without page reload
   const [coverUrl, setCoverUrl] = useState<string | null>(
@@ -83,21 +84,24 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingCover(true);
+    setCoverError("");
     try {
       const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `${tripId}/cover.${ext}`;
+      // Use the existing avatars bucket (trip-covers bucket may not exist)
+      const path = `trips/${tripId}/cover.${ext}`;
       const { error: upErr } = await supabase.storage
-        .from("trip-covers")
+        .from("avatars")
         .upload(path, file, { upsert: true, contentType: file.type });
       if (upErr) throw upErr;
 
-      const { data: { publicUrl } } = supabase.storage.from("trip-covers").getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
       const url = `${publicUrl}?t=${Date.now()}`;
 
-      await supabase.from("trips").update({ trip_image: url }).eq("id", tripId);
+      const { error: dbErr } = await supabase.from("trips").update({ trip_image: url }).eq("id", tripId);
+      if (dbErr) throw dbErr;
       setCoverUrl(url);
-    } catch (err) {
-      console.error("Cover upload failed", err);
+    } catch (err: any) {
+      setCoverError(err?.message ?? "Cover upload failed. Please try again.");
     } finally {
       setUploadingCover(false);
       if (coverRef.current) coverRef.current.value = "";
@@ -190,6 +194,13 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
       </div>
 
       <div className="px-4 space-y-3 pt-4 pb-8">
+
+        {/* Cover upload error */}
+        {coverError && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-xs text-red-600 text-center">
+            {coverError}
+          </div>
+        )}
 
         {/* Stat strip */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 grid grid-cols-3 divide-x divide-gray-100">

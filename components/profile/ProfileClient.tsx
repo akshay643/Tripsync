@@ -23,11 +23,13 @@ export function ProfileClient({ profile: initialProfile, userEmail }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !initialProfile?.id) return;
     setUploading(true);
+    setUploadError("");
     try {
       const ext = file.name.split(".").pop() ?? "jpg";
       const path = `${initialProfile.id}/avatar.${ext}`;
@@ -37,7 +39,6 @@ export function ProfileClient({ profile: initialProfile, userEmail }: Props) {
       if (upErr) throw upErr;
 
       const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
-      // Bust cache with timestamp
       const url = `${publicUrl}?t=${Date.now()}`;
 
       const { data } = await supabase
@@ -47,11 +48,10 @@ export function ProfileClient({ profile: initialProfile, userEmail }: Props) {
         .select()
         .single();
       if (data) setProfile(data);
-    } catch (err) {
-      console.error("Upload failed", err);
+    } catch (err: any) {
+      setUploadError(err?.message ?? "Photo upload failed. Please try again.");
     } finally {
       setUploading(false);
-      // Reset input so same file can be re-selected
       if (fileRef.current) fileRef.current.value = "";
     }
   }
@@ -120,6 +120,9 @@ export function ProfileClient({ profile: initialProfile, userEmail }: Props) {
           <h2 className="text-2xl font-bold text-white">{profile?.name || "Your Name"}</h2>
           <p className="text-indigo-300 text-sm mt-1">{profile?.email || userEmail}</p>
           <p className="text-indigo-400 text-xs mt-1">Tap the camera to change photo</p>
+          {uploadError && (
+            <p className="mt-2 text-xs text-red-300 bg-red-900/30 rounded-xl px-3 py-2">{uploadError}</p>
+          )}
         </motion.div>
       </div>
 
