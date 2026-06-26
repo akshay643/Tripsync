@@ -54,15 +54,15 @@ export default async function ExpensesPage({
 
       {/* Summary bar */}
       <div className="px-4 py-4 grid grid-cols-2 gap-3">
-        <div className="rounded-2xl bg-linear-to-br from-indigo-500 to-indigo-600 p-4 text-white">
-          <p className="text-xs text-indigo-200 font-medium">Group total</p>
+        <div className="rounded-2xl bg-indigo-500/15 border border-indigo-500/20 p-4 text-white">
+          <p className="text-xs text-indigo-400 font-medium">Group total</p>
           <p className="text-2xl font-bold mt-0.5">{formatCurrency(totalSpend)}</p>
-          <p className="text-indigo-200 text-xs mt-1">{expenses?.length ?? 0} expenses</p>
+          <p className="text-indigo-400 text-xs mt-1">{expenses?.length ?? 0} expenses</p>
         </div>
-        <div className="rounded-2xl bg-linear-to-br from-amber-500 to-orange-500 p-4 text-white">
-          <p className="text-xs text-amber-100 font-medium">Your share</p>
+        <div className="rounded-2xl bg-amber-500/15 border border-amber-500/20 p-4 text-white">
+          <p className="text-xs text-amber-400 font-medium">Your share</p>
           <p className="text-2xl font-bold mt-0.5">{formatCurrency(myTotal)}</p>
-          <p className="text-amber-100 text-xs mt-1">across all splits</p>
+          <p className="text-amber-400 text-xs mt-1">across all splits</p>
         </div>
       </div>
 

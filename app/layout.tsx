@@ -21,7 +21,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full bg-gray-50 font-sans">
+      <body className="min-h-full bg-[#08080f] font-sans">
         {children}
         <Toaster />
       </body>

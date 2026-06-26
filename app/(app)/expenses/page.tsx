@@ -41,24 +41,24 @@ export default async function ExpensesOverviewPage() {
   return (
     <>
       <TopBar title="All Expenses" />
-      <div className="px-4 py-4">
+      <div className="min-h-screen bg-[#08080f] px-4 py-4">
         {/* Summary */}
         <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className="rounded-2xl bg-indigo-600 p-4 text-white">
-            <p className="text-xs text-indigo-200 font-medium">Group total</p>
-            <p className="text-2xl font-bold mt-0.5">{formatCurrency(totalGroupSpend)}</p>
+          <div className="rounded-2xl bg-indigo-500/15 border border-indigo-500/20 p-4">
+            <p className="text-xs text-indigo-400 font-medium">Group total</p>
+            <p className="text-2xl font-bold mt-0.5 text-white">{formatCurrency(totalGroupSpend)}</p>
           </div>
-          <div className="rounded-2xl bg-amber-500 p-4 text-white">
-            <p className="text-xs text-amber-100 font-medium">Your share</p>
-            <p className="text-2xl font-bold mt-0.5">{formatCurrency(myTotal)}</p>
+          <div className="rounded-2xl bg-amber-500/15 border border-amber-500/20 p-4">
+            <p className="text-xs text-amber-400 font-medium">Your share</p>
+            <p className="text-2xl font-bold mt-0.5 text-white">{formatCurrency(myTotal)}</p>
           </div>
         </div>
 
         {allExpenses.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Receipt className="h-12 w-12 text-gray-200 mb-4" />
-            <p className="font-semibold text-gray-700">No expenses yet</p>
-            <p className="text-sm text-gray-400 mt-1">Add expenses inside a trip</p>
+            <Receipt className="h-12 w-12 text-slate-700 mb-4" />
+            <p className="font-semibold text-white">No expenses yet</p>
+            <p className="text-sm text-slate-500 mt-1">Add expenses inside a trip</p>
           </div>
         ) : (
           <div className="space-y-1">
@@ -67,20 +67,20 @@ export default async function ExpensesOverviewPage() {
               const isMyExpense = expense.paid_by === user?.id;
               return (
                 <Link key={expense.id} href={`/trips/${expense.trip_id}/expenses`}>
-                  <div className="flex items-center gap-3 py-3.5 border-b border-gray-50 active:bg-gray-50 rounded-xl px-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-50 text-xl shrink-0">
+                  <div className="flex items-center gap-3 py-3.5 border-b border-white/4 active:bg-white/3 rounded-xl px-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-xl shrink-0">
                       {CATEGORY_ICONS[expense.category] ?? "📦"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{expense.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
+                      <p className="text-sm font-semibold text-white truncate">{expense.title}</p>
+                      <p className="text-xs text-slate-600 mt-0.5">
                         {expense.trips?.title} · {isMyExpense ? "You paid" : `${expense.profiles?.name?.split(" ")[0] ?? "Someone"} paid`}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-gray-900">{formatCurrency(expense.amount)}</p>
+                      <p className="text-sm font-bold text-white">{formatCurrency(expense.amount)}</p>
                       {myShare !== undefined && (
-                        <p className="text-xs text-gray-400">{formatCurrency(myShare)} yours</p>
+                        <p className="text-xs text-slate-600">{formatCurrency(myShare)} yours</p>
                       )}
                     </div>
                   </div>

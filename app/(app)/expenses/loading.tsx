@@ -5,7 +5,7 @@ export default function Loading() {
   return (
     <>
       <TopBar title="All Expenses" />
-      <div className="px-4 py-4 space-y-3">
+      <div className="min-h-screen bg-[#08080f] px-4 py-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Skeleton className="h-20 rounded-2xl" />
           <Skeleton className="h-20 rounded-2xl" />

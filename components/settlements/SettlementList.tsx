@@ -46,11 +46,11 @@ export function SettlementList({ tripId, settlements, profiles, currentUserId, e
         animate={{ opacity: 1, scale: 1 }}
         className="flex flex-col items-center justify-center py-16 text-center"
       >
-        <div className="h-20 w-20 rounded-3xl bg-emerald-50 flex items-center justify-center mb-4">
+        <div className="h-20 w-20 rounded-3xl bg-emerald-500/10 flex items-center justify-center mb-4">
           <PartyPopper className="h-10 w-10 text-emerald-500" />
         </div>
-        <p className="text-lg font-bold text-gray-900">All settled up!</p>
-        <p className="text-sm text-gray-400 mt-1">No outstanding balances 🎉</p>
+        <p className="text-lg font-bold text-white">All settled up!</p>
+        <p className="text-sm text-slate-500 mt-1">No outstanding balances 🎉</p>
       </motion.div>
     );
   }
@@ -62,7 +62,7 @@ export function SettlementList({ tripId, settlements, profiles, currentUserId, e
     <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
       {pending.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">To settle</p>
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider px-1">To settle</p>
           {pending.map((s) => {
             const k = key(s);
             const from = profiles[s.from_user];
@@ -82,7 +82,7 @@ export function SettlementList({ tripId, settlements, profiles, currentUserId, e
                     <ArrowRight className="h-3.5 w-3.5 text-gray-400 shrink-0" />
                     <span>{s.to_user === currentUserId ? "You" : to?.name?.split(" ")[0] ?? "Someone"}</span>
                   </div>
-                  <p className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(s.amount)}</p>
+                  <p className="text-lg font-bold text-white mt-0.5">{formatCurrency(s.amount)}</p>
                 </div>
                 {isMe && (
                   <motion.button
@@ -103,7 +103,7 @@ export function SettlementList({ tripId, settlements, profiles, currentUserId, e
 
       {done.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1 mt-4">Settled</p>
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider px-1 mt-4">Settled</p>
           {done.map((s) => {
             const from = profiles[s.from_user];
             const to = profiles[s.to_user];
