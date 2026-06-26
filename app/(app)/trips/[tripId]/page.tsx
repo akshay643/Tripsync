@@ -13,10 +13,15 @@ export default async function TripDashboardPage({
   const { tripId } = await params;
   const { supabase, user } = await getServerUser();
 
-  // DB queries in parallel (auth already resolved via cookie above)
-  const [{ data: trip }, { data: expenses }] = await Promise.all([
+  const [{ data: trip }, { data: expenses }, { data: myExpenses }, { data: mySplits }] = await Promise.all([
     supabase.from("trips").select("*, trip_members(*, profiles(*))").eq("id", tripId).single(),
     supabase.from("expenses").select("amount").eq("trip_id", tripId),
+    supabase.from("expenses").select("amount").eq("trip_id", tripId).eq("paid_by", user?.id ?? ""),
+    supabase
+      .from("expense_splits")
+      .select("amount, expenses!inner(trip_id)")
+      .eq("user_id", user?.id ?? "")
+      .eq("expenses.trip_id", tripId),
   ]);
 
   if (!trip) notFound();
@@ -24,6 +29,9 @@ export default async function TripDashboardPage({
   if (!isMember) notFound();
 
   const totalSpend = (expenses ?? []).reduce((s: number, e: any) => s + e.amount, 0);
+  const totalPaid  = (myExpenses ?? []).reduce((s: number, e: any) => s + e.amount, 0);
+  const totalOwed  = (mySplits ?? []).reduce((s: number, e: any) => s + e.amount, 0);
+  const balance    = totalPaid - totalOwed;
 
   return (
     <>
@@ -38,6 +46,7 @@ export default async function TripDashboardPage({
         totalSpend={totalSpend}
         expenseCount={expenses?.length ?? 0}
         currentUserId={user?.id ?? ""}
+        balance={balance}
       />
     </>
   );

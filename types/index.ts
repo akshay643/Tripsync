@@ -130,3 +130,30 @@ export interface ItineraryItem {
   order_index: number;
   created_at: string;
 }
+
+export type PackingCategory =
+  | "clothes"
+  | "toiletries"
+  | "electronics"
+  | "documents"
+  | "medicines"
+  | "food"
+  | "gear"
+  | "general";
+
+export interface PackingItem {
+  id: string;
+  trip_id: string;
+  added_by: string;
+  assigned_to: string | null;
+  title: string;
+  category: PackingCategory;
+  packed: boolean;
+  packed_by: string | null;
+  packed_at: string | null;
+  quantity: number;
+  order_index: number;
+  created_at: string;
+  added_by_profile?: Profile;
+  assigned_to_profile?: Profile;
+}

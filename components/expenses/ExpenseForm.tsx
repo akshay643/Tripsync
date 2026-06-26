@@ -113,7 +113,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
     >
       {/* Category picker */}
       <motion.div variants={staggerItem} className="space-y-2">
-        <Label className="text-sm font-semibold text-gray-700">Category</Label>
+        <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Category</Label>
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {CATEGORIES.map((cat) => (
             <motion.button
@@ -124,7 +124,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
               className={`shrink-0 flex flex-col items-center gap-1 rounded-2xl px-3 py-2.5 border text-xs font-medium transition-all ${
                 form.category === cat
                   ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200"
-                  : "bg-white text-gray-600 border-gray-200"
+                  : "bg-white/5 text-slate-300 border-white/8"
               }`}
             >
               <span className="text-lg">{CATEGORY_ICONS[cat]}</span>
@@ -135,43 +135,43 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
       </motion.div>
 
       <motion.div variants={staggerItem} className="space-y-1.5">
-        <Label className="text-sm font-semibold text-gray-700">Title *</Label>
+        <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Title *</Label>
         <Input
           placeholder="Dinner at Curlies"
           value={form.title}
           onChange={(e) => set("title", e.target.value)}
           required
-          className="h-12 rounded-xl border-gray-200 bg-white"
+          className="h-12 rounded-xl"
         />
       </motion.div>
 
       <motion.div variants={staggerItem} className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-gray-700">Amount (₹) *</Label>
+          <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Amount (₹) *</Label>
           <Input
             type="number"
             placeholder="2000"
             value={form.amount}
             onChange={(e) => set("amount", e.target.value)}
             required
-            className="h-12 rounded-xl border-gray-200 bg-white text-lg font-bold"
+            className="h-12 rounded-xl text-lg font-bold text-white"
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-sm font-semibold text-gray-700">Date</Label>
+          <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Date</Label>
           <Input
             type="date"
             value={form.date}
             onChange={(e) => set("date", e.target.value)}
-            className="h-12 rounded-xl border-gray-200 bg-white"
+            className="h-12 rounded-xl"
           />
         </div>
       </motion.div>
 
       <motion.div variants={staggerItem} className="space-y-1.5">
-        <Label className="text-sm font-semibold text-gray-700">Paid by</Label>
+        <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Paid by</Label>
         <Select value={form.paid_by} onValueChange={(v) => set("paid_by", v)}>
-          <SelectTrigger className="h-12 rounded-xl border-gray-200 bg-white">
+          <SelectTrigger className="h-12 rounded-xl">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -186,21 +186,21 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
 
       {/* Split type tabs */}
       <motion.div variants={staggerItem} className="space-y-3">
-        <Label className="text-sm font-semibold text-gray-700">Split type</Label>
-        <div className="relative flex gap-1 bg-gray-100 rounded-xl p-1">
+        <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Split type</Label>
+        <div className="relative flex gap-1 bg-white/5 rounded-xl p-1">
           {(["equal", "custom"] as SplitType[]).map((type) => (
             <motion.button
               key={type}
               type="button"
               onClick={() => setSplitType(type)}
               className={`relative flex-1 py-2 rounded-lg text-sm font-semibold transition-colors z-10 ${
-                splitType === type ? "text-gray-900" : "text-gray-500"
+                splitType === type ? "text-white" : "text-slate-500"
               }`}
             >
               {splitType === type && (
                 <motion.div
                   layoutId="split-pill"
-                  className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                  className="absolute inset-0 bg-indigo-600/20 rounded-lg"
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
@@ -216,7 +216,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="rounded-xl bg-indigo-50 border border-indigo-100 p-3 text-sm text-indigo-700 font-medium"
+              className="rounded-xl bg-indigo-500/10 border border-indigo-500/20 p-3 text-sm text-indigo-300 font-medium"
             >
               {formatCurrency(equalShare)} each × {members.length} people
             </motion.div>
@@ -236,7 +236,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
                     <AvatarImage src={m.avatar || undefined} />
                     <AvatarFallback className="text-xs">{getInitials(m.name)}</AvatarFallback>
                   </Avatar>
-                  <span className="flex-1 text-sm text-gray-700 font-medium">
+                  <span className="flex-1 text-sm text-slate-200 font-medium">
                     {m.id === currentUserId ? "You" : m.name || m.email}
                   </span>
                   <Input
@@ -261,12 +261,12 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
       </motion.div>
 
       <motion.div variants={staggerItem} className="space-y-1.5">
-        <Label className="text-sm font-semibold text-gray-700">Notes</Label>
+        <Label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Notes</Label>
         <Textarea
           placeholder="Optional notes…"
           value={form.notes}
           onChange={(e) => set("notes", e.target.value)}
-          className="rounded-xl border-gray-200 bg-white resize-none"
+          className="rounded-xl resize-none"
           rows={2}
         />
       </motion.div>
@@ -287,7 +287,7 @@ export function ExpenseForm({ tripId, members, currentUserId }: ExpenseFormProps
           disabled={loading || !form.title || !form.amount}
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
-          className="w-full h-12 rounded-xl bg-linear-to-r from-indigo-600 to-indigo-700 text-white font-bold text-sm shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
+          className="w-full h-12 rounded-xl bg-linear-to-r bg-indigo-600 text-white font-bold text-sm shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all"
         >
           {loading && <Loader2 className="h-4 w-4 animate-spin" />}
           {loading ? "Adding…" : "Add Expense"}

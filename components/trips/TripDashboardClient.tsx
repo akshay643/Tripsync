@@ -8,7 +8,7 @@ import { formatCurrency, formatShortDate, getInitials } from "@/lib/utils";
 import { staggerContainer, staggerItem } from "@/components/ui/motion";
 import {
   Map, Receipt, Users, Calendar, ArrowRightLeft, MapPin,
-  Plus, Clock, ChevronRight, Plane, Camera, Loader2,
+  Plus, Clock, ChevronRight, Plane, Camera, Loader2, Package,
 } from "lucide-react";
 import { LocationShareButton } from "@/components/map/LocationShareButton";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +19,7 @@ interface Props {
   totalSpend: number;
   expenseCount: number;
   currentUserId: string;
+  balance: number;
 }
 
 function getDaysInfo(startDate?: string, endDate?: string) {
@@ -55,11 +56,12 @@ const NAV = (id: string) => [
   { href: `/trips/${id}/expenses`,    icon: Receipt,        label: "Expenses",  sub: "Split bills",    accent: "text-emerald-400", bg: "bg-emerald-500/10" },
   { href: `/trips/${id}/settlements`, icon: ArrowRightLeft, label: "Settle Up", sub: "Clear debts",    accent: "text-orange-400",  bg: "bg-orange-500/10"  },
   { href: `/trips/${id}/itinerary`,   icon: Calendar,       label: "Itinerary", sub: "Day by day",     accent: "text-violet-400",  bg: "bg-violet-500/10"  },
+  { href: `/trips/${id}/packing`,     icon: Package,        label: "Packing",   sub: "What to bring",  accent: "text-amber-400",   bg: "bg-amber-500/10"   },
   { href: `/trips/${id}/map`,         icon: Map,            label: "Live Map",  sub: "Track everyone", accent: "text-sky-400",     bg: "bg-sky-500/10"     },
   { href: `/trips/${id}/members`,     icon: Users,          label: "Members",   sub: "Who's in",       accent: "text-pink-400",    bg: "bg-pink-500/10"    },
 ];
 
-export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, currentUserId }: Props) {
+export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, currentUserId, balance }: Props) {
   const supabase = createClient();
   const coverRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -207,6 +209,39 @@ export function TripDashboardClient({ trip, tripId, totalSpend, expenseCount, cu
             </div>
           ))}
         </div>
+
+        {/* Balance widget */}
+        {expenseCount > 0 && (
+          <Link href={`/trips/${tripId}/settlements`}>
+            <motion.div
+              whileTap={{ scale: 0.98 }}
+              className={`flex items-center gap-3 rounded-2xl border px-4 py-3.5 ${
+                balance > 0.01
+                  ? "bg-emerald-500/8 border-emerald-500/20"
+                  : balance < -0.01
+                  ? "bg-red-500/8 border-red-500/20"
+                  : "bg-white/4 border-white/7"
+              }`}
+            >
+              <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-lg ${
+                balance > 0.01 ? "bg-emerald-500/15" : balance < -0.01 ? "bg-red-500/15" : "bg-white/8"
+              }`}>
+                {balance > 0.01 ? "💚" : balance < -0.01 ? "🔴" : "✅"}
+              </div>
+              <div className="flex-1">
+                <p className={`text-xs font-semibold ${
+                  balance > 0.01 ? "text-emerald-400" : balance < -0.01 ? "text-red-400" : "text-slate-500"
+                }`}>
+                  {balance > 0.01 ? "You're owed" : balance < -0.01 ? "You owe" : "All settled up"}
+                </p>
+                <p className="text-white font-black text-base mt-0.5">
+                  {Math.abs(balance) < 0.01 ? "Nothing to settle" : formatCurrency(Math.abs(balance))}
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-600" />
+            </motion.div>
+          </Link>
+        )}
 
         {/* Budget bar */}
         {trip.budget && (
