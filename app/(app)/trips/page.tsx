@@ -1,10 +1,8 @@
 export const dynamic = "force-dynamic";
 import { getServerUser } from "@/lib/supabase/server";
 import Link from "next/link";
-import { TripCard } from "@/components/trips/TripCard";
-import { Button } from "@/components/ui/button";
 import { TripsListClient } from "@/components/trips/TripsListClient";
-import { Plus, Plane } from "lucide-react";
+import { Plus, Plane, Sparkles } from "lucide-react";
 import type { TripWithMembers } from "@/types";
 
 export default async function TripsPage() {
@@ -28,47 +26,51 @@ export default async function TripsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#08080f]">
       {/* Header */}
-      <div className="bg-linear-to-br from-indigo-600 via-indigo-700 to-purple-700 px-5 pt-12 pb-8">
-        <div className="flex items-end justify-between">
+      <div className="relative overflow-hidden px-5 pt-14 pb-10">
+        {/* Glow orbs */}
+        <div className="pointer-events-none absolute -top-20 -right-20 h-64 w-64 rounded-full bg-indigo-600/20 blur-3xl" />
+        <div className="pointer-events-none absolute -top-10 -left-10 h-48 w-48 rounded-full bg-violet-600/15 blur-3xl" />
+
+        <div className="relative flex items-end justify-between">
           <div>
-            <p className="text-indigo-300 text-sm font-medium">Welcome back ✈️</p>
-            <h1 className="text-2xl font-bold text-white mt-0.5">My Trips</h1>
+            <p className="text-slate-500 text-sm font-medium flex items-center gap-1.5 mb-1">
+              <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
+              Where to next?
+            </p>
+            <h1 className="text-3xl font-black text-white tracking-tight">My Trips</h1>
+            {tripList.length > 0 && (
+              <p className="text-slate-500 text-sm mt-1">{tripList.length} adventure{tripList.length !== 1 ? "s" : ""}</p>
+            )}
           </div>
-          <Link href="/trips/new">
-            <Button size="sm" className="bg-white/15 hover:bg-white/25 text-white border-0 gap-1.5 backdrop-blur">
-              <Plus className="h-4 w-4" />
-              New Trip
-            </Button>
+          <Link
+            href="/trips/new"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold px-4 py-2.5 rounded-2xl shadow-lg shadow-indigo-500/30 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New
           </Link>
         </div>
-        {tripList.length > 0 && (
-          <div className="flex items-center gap-4 mt-5">
-            <div className="bg-white/10 rounded-2xl px-4 py-2.5 backdrop-blur">
-              <p className="text-indigo-200 text-xs">Trips</p>
-              <p className="text-white font-bold text-lg">{tripList.length}</p>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Content */}
-      <div className="px-4 -mt-3 pb-6">
+      <div className="px-4 pb-6">
         {tripList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="h-20 w-20 rounded-3xl bg-indigo-50 flex items-center justify-center mb-5">
-              <Plane className="h-10 w-10 text-indigo-400" />
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="h-20 w-20 rounded-3xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-5">
+              <Plane className="h-9 w-9 text-indigo-400" />
             </div>
-            <h2 className="text-lg font-bold text-gray-900">No trips yet</h2>
-            <p className="text-sm text-gray-500 mt-2 mb-7 max-w-xs">
-              Create your first trip and invite your crew
+            <h2 className="text-lg font-bold text-white">No trips yet</h2>
+            <p className="text-sm text-slate-500 mt-2 mb-8 max-w-xs">
+              Create your first trip and invite your crew to plan together
             </p>
-            <Link href="/trips/new">
-              <Button className="gap-2 px-6 shadow-lg shadow-indigo-200">
-                <Plus className="h-4 w-4" />
-                Create a Trip
-              </Button>
+            <Link
+              href="/trips/new"
+              className="flex items-center gap-2 bg-indigo-600 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-indigo-500/30"
+            >
+              <Plus className="h-4 w-4" />
+              Create a Trip
             </Link>
           </div>
         ) : (

@@ -105,21 +105,21 @@ export function LocationShareButton({ tripId, currentUserId }: Props) {
             initial={{ opacity: 0, y: 8, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
-            className="absolute bottom-full right-0 mb-2 bg-white rounded-2xl shadow-xl border border-gray-100 p-3 w-44 z-50"
+            className="absolute bottom-full right-0 mb-2 bg-[#14142a] rounded-2xl shadow-2xl border border-white/10 p-3 w-44 z-50"
           >
-            <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-2 px-1">
+            <p className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 mb-2 px-1">
               <Clock className="h-3.5 w-3.5" /> Share for how long?
             </p>
             {DURATIONS.map(({ label, minutes }) => (
               <button
                 key={label}
                 onClick={() => start(minutes)}
-                className="w-full text-left px-3 py-2 rounded-xl text-sm font-medium text-gray-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                className="w-full text-left px-3 py-2 rounded-xl text-sm font-medium text-white hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors"
               >
                 {label}
               </button>
             ))}
-            <button onClick={() => setShowPicker(false)} className="w-full text-center text-xs text-gray-400 pt-1">Cancel</button>
+            <button onClick={() => setShowPicker(false)} className="w-full text-center text-xs text-slate-600 pt-1">Cancel</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -127,7 +127,7 @@ export function LocationShareButton({ tripId, currentUserId }: Props) {
       {error && (
         <motion.p
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          className="absolute bottom-full right-0 mb-2 text-xs text-red-500 bg-red-50 rounded-xl px-3 py-2 whitespace-nowrap"
+          className="absolute bottom-full right-0 mb-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 whitespace-nowrap"
         >
           {error}
         </motion.p>

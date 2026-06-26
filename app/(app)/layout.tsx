@@ -2,7 +2,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col min-h-screen max-w-lg mx-auto bg-white">
+    <div className="flex flex-col min-h-screen max-w-lg mx-auto bg-[#08080f]">
       <main className="flex-1 pb-20">{children}</main>
       <BottomNav />
     </div>

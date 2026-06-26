@@ -235,11 +235,11 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
   // ── No-token fallback ──────────────────────────────────────────
   if (!hasToken) {
     return (
-      <div className="flex flex-col flex-1 bg-gray-50">
+      <div className="flex flex-col flex-1 bg-[#08080f]">
         <div className="px-4 pt-4 pb-2 space-y-2">
           <div className="flex items-center gap-2 mb-1">
-            <Users className="h-4 w-4 text-indigo-500" />
-            <p className="text-sm font-semibold text-gray-700">
+            <Users className="h-4 w-4 text-indigo-400" />
+            <p className="text-sm font-semibold text-white">
               {locations.length > 0 ? `${locations.length} sharing live` : "No one sharing yet"}
             </p>
           </div>
@@ -247,19 +247,19 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
             const profile = memberProfiles[loc.user_id];
             const isMe = loc.user_id === currentUserId;
             return (
-              <div key={loc.user_id} className="flex items-center gap-3 bg-white rounded-2xl border border-gray-100 p-3 shadow-sm">
-                <div className={`h-10 w-10 rounded-full ${isMe ? "bg-indigo-500" : "bg-sky-500"} flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden`}>
+              <div key={loc.user_id} className="flex items-center gap-3 bg-[#0f0f1e] rounded-2xl border border-white/7 p-3">
+                <div className={`h-10 w-10 rounded-full ${isMe ? "bg-indigo-600" : "bg-sky-600"} flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden`}>
                   {profile?.avatar ? <img src={profile.avatar} className="h-10 w-10 object-cover" alt="" /> : getInitials(profile?.name)}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-gray-900">{isMe ? "You" : profile?.name}</p>
-                  <p className="text-xs text-gray-400 flex items-center gap-1">
-                    <Radio className="h-3 w-3 text-emerald-500 animate-pulse" /> Live
+                  <p className="text-sm font-semibold text-white">{isMe ? "You" : profile?.name}</p>
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <Radio className="h-3 w-3 text-emerald-400 animate-pulse" /> Live
                   </p>
                 </div>
                 {!isMe && (
                   <a href={googleMapsUrl(loc.latitude, loc.longitude)} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 bg-indigo-50 text-indigo-600 rounded-xl px-3 py-2 text-xs font-bold shrink-0">
+                    className="flex items-center gap-1.5 bg-indigo-500/15 text-indigo-400 rounded-xl px-3 py-2 text-xs font-bold shrink-0">
                     <Navigation className="h-3.5 w-3.5" /> Navigate
                   </a>
                 )}
@@ -267,9 +267,9 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
             );
           })}
           {locations.length === 0 && (
-            <div className="text-center py-6">
-              <MapPin className="h-8 w-8 text-indigo-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500">Share your location to appear here</p>
+            <div className="text-center py-10">
+              <MapPin className="h-8 w-8 text-indigo-500/40 mx-auto mb-2" />
+              <p className="text-sm text-slate-600">Share your location to appear here</p>
             </div>
           )}
         </div>
@@ -303,47 +303,47 @@ function ShareControls({ sharing, showPicker, geoError, onShare, onStop, onPickD
       <AnimatePresence>
         {geoError && (
           <motion.div key="err" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="bg-red-50 border border-red-100 rounded-2xl px-4 py-3 text-xs text-red-600 text-center">
+            className="bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-3 text-xs text-red-400 text-center">
             {geoError}
           </motion.div>
         )}
         {showPicker && (
           <motion.div key="picker" initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
-            className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 space-y-1">
-            <p className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-2">
-              <Clock className="h-4 w-4 text-indigo-500" /> Share for how long?
+            className="bg-[#14142a]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/10 p-4 space-y-1">
+            <p className="text-sm font-semibold text-white flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-indigo-400" /> Share for how long?
             </p>
             {SHARE_DURATIONS.map(({ label, minutes }) => (
               <motion.button key={label} whileTap={{ scale: 0.97 }} onClick={() => onPickDuration(minutes)}
-                className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-gray-800 hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                className="w-full text-left px-4 py-3 rounded-xl text-sm font-medium text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 transition-colors">
                 {label}
               </motion.button>
             ))}
-            <button onClick={onDismissPicker} className="w-full text-center text-xs text-gray-400 pt-1">Cancel</button>
+            <button onClick={onDismissPicker} className="w-full text-center text-xs text-slate-600 pt-1">Cancel</button>
           </motion.div>
         )}
       </AnimatePresence>
       <div className="flex gap-2">
         <motion.button whileTap={{ scale: 0.97 }} onClick={onMeetup}
-          className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl bg-white/90 backdrop-blur border border-gray-200 text-sm font-semibold text-gray-700 shadow-sm">
-          <MapPin className="h-4 w-4 text-amber-500" /> Drop Pin
+          className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl bg-[#14142a]/90 backdrop-blur border border-white/10 text-sm font-semibold text-slate-300 shadow-lg">
+          <MapPin className="h-4 w-4 text-amber-400" /> Drop Pin
         </motion.button>
         {sharing ? (
           <motion.button whileTap={{ scale: 0.97 }} onClick={onStop}
-            className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl bg-red-500 text-white text-sm font-bold shadow-md">
+            className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl bg-red-500 text-white text-sm font-bold shadow-lg shadow-red-500/25">
             <X className="h-4 w-4" /> Stop Sharing
           </motion.button>
         ) : (
           <motion.button whileTap={{ scale: 0.97 }} onClick={onShare}
-            className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-md shadow-indigo-200">
+            className="flex-1 flex items-center justify-center gap-1.5 h-12 rounded-xl bg-indigo-600 text-white text-sm font-bold shadow-lg shadow-indigo-500/30">
             <Navigation className="h-4 w-4" /> Share Location
           </motion.button>
         )}
       </div>
       {sharing && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center gap-1.5 py-0.5">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
-          <p className="text-xs text-gray-500 font-medium">Broadcasting your location</p>
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+          <p className="text-xs text-slate-500 font-medium">Broadcasting your location</p>
         </motion.div>
       )}
     </div>
