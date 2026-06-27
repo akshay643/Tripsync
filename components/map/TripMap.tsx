@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Navigation, MapPin, X, Clock, Radio, RefreshCw, Crosshair, Sparkles } from "lucide-react";
+import { Navigation, MapPin, X, Clock, Radio, RefreshCw, Crosshair, Sparkles, Flag } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import type { Profile, MeetupPoint } from "@/types";
 import type { Map as MapboxMap, Marker as MapboxMarker } from "mapbox-gl";
@@ -85,8 +85,13 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
   }
 
   async function fetchMeetupPoints() {
-    const { data } = await supabase.from("meetup_points").select("*").eq("trip_id", tripId).eq("active", true);
-    if (data) setMeetupPoints(data);
+    const { data } = await supabase
+      .from("meetup_points")
+      .select("*, creator:profiles!created_by(id,name,avatar,email,phone,created_at)")
+      .eq("trip_id", tripId)
+      .eq("active", true)
+      .order("created_at", { ascending: false });
+    if (data) setMeetupPoints(data as MeetupPoint[]);
   }
 
   // ── Realtime subscriptions (Postgres Changes) ──────────────────
@@ -206,7 +211,6 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
     import("mapbox-gl").then((mod) => {
       if (cancelled || !mapContainer.current) return;
       const mapboxgl = mod.default;
-      import("mapbox-gl/dist/mapbox-gl.css").catch(() => {});
       mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
       const m = new mapboxgl.Map({
         container: mapContainer.current!,
@@ -262,10 +266,20 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
       });
 
       meetupPoints.forEach((p) => {
+        const creator = p.creator ?? memberProfiles[p.created_by];
+        const droppedBy = p.created_by === currentUserId ? "You" : creator?.name || "A trip member";
         const el = document.createElement("div");
-        el.innerHTML = `<div style="background:#F59E0B;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">📍</div>`;
+        el.style.cssText = "display:flex;flex-direction:column;align-items:center;cursor:pointer;";
+        el.innerHTML = `
+          <div style="background:linear-gradient(135deg,#F59E0B,#EF4444);border-radius:50%;width:46px;height:46px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 10px 24px rgba(245,158,11,0.35);border:3px solid white;">📍</div>
+          <div style="font-size:10px;font-weight:800;color:#111827;background:white;border-radius:10px;padding:2px 7px;margin-top:4px;box-shadow:0 1px 6px rgba(0,0,0,0.12);white-space:nowrap;">${droppedBy.split(" ")[0]}</div>`;
         const popup = new mapboxgl.Popup({ offset: 30 })
-          .setHTML(`<div style="padding:4px 2px;"><p style="font-weight:700;font-size:13px;margin:0 0 6px;">${p.title}</p><a href="${googleMapsUrl(p.latitude, p.longitude)}" target="_blank" rel="noopener" style="background:#F59E0B;color:white;border-radius:10px;padding:8px 12px;text-decoration:none;font-size:12px;font-weight:600;display:block;text-align:center;">Open in Google Maps</a></div>`);
+          .setHTML(`
+            <div style="padding:4px 2px;min-width:160px;">
+              <p style="font-weight:800;font-size:13px;margin:0 0 4px;color:#111827;">${p.title}</p>
+              <p style="font-size:11px;color:#6b7280;margin:0 0 10px;">Dropped by ${droppedBy} · ${timeAgo(p.created_at)}</p>
+              <a href="${googleMapsUrl(p.latitude, p.longitude)}" target="_blank" rel="noopener" style="background:#F59E0B;color:white;border-radius:10px;padding:8px 12px;text-decoration:none;font-size:12px;font-weight:700;display:block;text-align:center;">Open in Google Maps</a>
+            </div>`);
         const marker = new mapboxgl.Marker({ element: el }).setLngLat([p.longitude, p.latitude]).setPopup(popup).addTo(map);
         markersRef.current[`meetup-${p.id}`] = marker;
       });
@@ -291,9 +305,10 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
           memberProfiles={memberProfiles}
           otherLiveCount={otherLiveCount}
           refreshing={refreshing}
-          onRefresh={refreshLiveData}
-          compact={false}
-        />
+        onRefresh={refreshLiveData}
+        meetupPoints={meetupPoints}
+        compact={false}
+      />
         <div className="flex-1" />
         <ShareControls sharing={sharing} showPicker={showPicker} geoError={geoError}
           onShare={() => setShowPicker(true)} onStop={stopSharing}
@@ -313,6 +328,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
         otherLiveCount={otherLiveCount}
         refreshing={refreshing}
         onRefresh={refreshLiveData}
+        meetupPoints={meetupPoints}
         compact
       />
       <ShareControls sharing={sharing} showPicker={showPicker} geoError={geoError}
@@ -323,13 +339,14 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
   );
 }
 
-function LivePanel({ locations, currentUserId, memberProfiles, otherLiveCount, refreshing, onRefresh, compact }: {
+function LivePanel({ locations, currentUserId, memberProfiles, otherLiveCount, refreshing, onRefresh, meetupPoints, compact }: {
   locations: LiveLocation[];
   currentUserId: string;
   memberProfiles: Record<string, Profile>;
   otherLiveCount: number;
   refreshing: boolean;
   onRefresh: () => void;
+  meetupPoints: MeetupPoint[];
   compact: boolean;
 }) {
   const title = locations.length === 0
@@ -391,6 +408,37 @@ function LivePanel({ locations, currentUserId, memberProfiles, otherLiveCount, r
                 </a>
               );
             })}
+          </div>
+        )}
+
+        {meetupPoints.length > 0 && (
+          <div className="border-t border-white/7 px-4 py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Flag className="h-3.5 w-3.5 text-amber-400" />
+              <p className="text-xs font-bold text-white">Dropped pins</p>
+            </div>
+            <div className="space-y-2">
+              {meetupPoints.slice(0, 3).map((point) => {
+                const creator = point.creator ?? memberProfiles[point.created_by];
+                const droppedBy = point.created_by === currentUserId ? "You" : creator?.name || "Trip member";
+                return (
+                  <a
+                    key={point.id}
+                    href={googleMapsUrl(point.latitude, point.longitude)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-3 py-2 active:scale-[0.98] transition-transform"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-amber-500/20 flex items-center justify-center text-sm">📍</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{point.title}</p>
+                      <p className="text-[10px] text-amber-300 truncate">Dropped by {droppedBy} · {timeAgo(point.created_at)}</p>
+                    </div>
+                    <Navigation className="h-3.5 w-3.5 text-amber-300" />
+                  </a>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

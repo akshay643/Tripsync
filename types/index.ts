@@ -107,6 +107,7 @@ export interface MeetupPoint {
   longitude: number;
   active: boolean;
   created_at: string;
+  creator?: Profile;
 }
 
 export interface ItineraryDay {
