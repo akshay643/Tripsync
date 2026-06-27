@@ -3,14 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Navigation, MapPin, X, Clock, Radio, Users } from "lucide-react";
+import { Navigation, MapPin, X, Clock, Radio, RefreshCw, Crosshair, Sparkles } from "lucide-react";
 import { getInitials } from "@/lib/utils";
 import type { Profile, MeetupPoint } from "@/types";
+import type { Map as MapboxMap, Marker as MapboxMarker } from "mapbox-gl";
 
 interface TripMapProps {
   tripId: string;
   currentUserId: string;
   memberProfiles: Record<string, Profile>;
+}
+
+interface LiveLocation {
+  id?: string;
+  user_id: string;
+  trip_id: string;
+  latitude: number;
+  longitude: number;
+  sharing_enabled: boolean;
+  sharing_until: string | null;
+  updated_at: string;
 }
 
 const SHARE_DURATIONS = [
@@ -23,29 +35,52 @@ function googleMapsUrl(lat: number, lng: number) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
+function timeAgo(date?: string | null) {
+  if (!date) return "just now";
+  const diff = Date.now() - new Date(date).getTime();
+  const mins = Math.max(0, Math.floor(diff / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function sharingLabel(until?: string | null) {
+  if (!until) return "until stopped";
+  const mins = Math.ceil((new Date(until).getTime() - Date.now()) / 60000);
+  if (mins <= 0) return "ending now";
+  if (mins < 60) return `${mins}m left`;
+  return `${Math.ceil(mins / 60)}h left`;
+}
+
 export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const markersRef = useRef<Record<string, any>>({});
+  const mapRef = useRef<MapboxMap | null>(null);
+  const markersRef = useRef<Record<string, MapboxMarker>>({});
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const supabase = createClient();
 
   const [sharing, setSharing] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  const [locations, setLocations] = useState<any[]>([]);
+  const [locations, setLocations] = useState<LiveLocation[]>([]);
   const [meetupPoints, setMeetupPoints] = useState<MeetupPoint[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [geoError, setGeoError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const hasToken = !!process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   // ── DB fetch helpers ───────────────────────────────────────────
   async function fetchLocations() {
+    const now = new Date().toISOString();
     const { data } = await supabase
       .from("locations")
       .select("*")
       .eq("trip_id", tripId)
-      .eq("sharing_enabled", true);
+      .eq("sharing_enabled", true)
+      .or(`sharing_until.is.null,sharing_until.gt.${now}`)
+      .order("updated_at", { ascending: false });
     if (data) setLocations(data);
   }
 
@@ -58,8 +93,10 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
   // This was the working approach — DB reads with Postgres Changes for real-time updates.
   // We reverted from Broadcast because late-joiners missed earlier broadcasts.
   useEffect(() => {
-    fetchLocations();
-    fetchMeetupPoints();
+    void Promise.resolve().then(() => {
+      void fetchLocations();
+      void fetchMeetupPoints();
+    });
 
     const channel = supabase
       .channel(`map:${tripId}`)
@@ -142,6 +179,12 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
     fetchLocations();
   }
 
+  async function refreshLiveData() {
+    setRefreshing(true);
+    await Promise.all([fetchLocations(), fetchMeetupPoints()]);
+    setRefreshing(false);
+  }
+
   async function dropMeetupPoint() {
     setGeoError("");
     navigator.geolocation.getCurrentPosition(
@@ -182,8 +225,10 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
   useEffect(() => {
     if (!mapRef.current || !mapReady) return;
     import("mapbox-gl").then((mod) => {
+      const map = mapRef.current;
+      if (!map) return;
       const mapboxgl = mod.default;
-      Object.values(markersRef.current).forEach((m: any) => m.remove());
+      Object.values(markersRef.current).forEach((m) => m.remove());
       markersRef.current = {};
 
       locations.forEach((loc) => {
@@ -202,6 +247,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
           .setHTML(`
             <div style="padding:4px 2px;min-width:150px;">
               <p style="font-size:13px;font-weight:700;color:#111;margin:0 0 8px;">${isMe ? "Your location" : profile?.name || "Member"}</p>
+              <p style="font-size:11px;color:#6b7280;margin:0 0 10px;">Updated ${timeAgo(loc.updated_at)} · ${sharingLabel(loc.sharing_until)}</p>
               <a href="${googleMapsUrl(loc.latitude, loc.longitude)}" target="_blank" rel="noopener"
                 style="display:flex;align-items:center;justify-content:center;gap:6px;background:#4F46E5;color:white;border-radius:10px;padding:9px 12px;text-decoration:none;font-size:12px;font-weight:600;">
                 Navigate in Google Maps
@@ -211,7 +257,7 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat([loc.longitude, loc.latitude])
           .setPopup(popup)
-          .addTo(mapRef.current);
+          .addTo(map);
         markersRef.current[loc.user_id] = marker;
       });
 
@@ -220,59 +266,34 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
         el.innerHTML = `<div style="background:#F59E0B;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 12px rgba(0,0,0,0.2);">📍</div>`;
         const popup = new mapboxgl.Popup({ offset: 30 })
           .setHTML(`<div style="padding:4px 2px;"><p style="font-weight:700;font-size:13px;margin:0 0 6px;">${p.title}</p><a href="${googleMapsUrl(p.latitude, p.longitude)}" target="_blank" rel="noopener" style="background:#F59E0B;color:white;border-radius:10px;padding:8px 12px;text-decoration:none;font-size:12px;font-weight:600;display:block;text-align:center;">Open in Google Maps</a></div>`);
-        new mapboxgl.Marker({ element: el }).setLngLat([p.longitude, p.latitude]).setPopup(popup).addTo(mapRef.current);
+        const marker = new mapboxgl.Marker({ element: el }).setLngLat([p.longitude, p.latitude]).setPopup(popup).addTo(map);
+        markersRef.current[`meetup-${p.id}`] = marker;
       });
 
       if (locations.length > 0 || meetupPoints.length > 0) {
         const bounds = new mapboxgl.LngLatBounds();
         locations.forEach((l) => bounds.extend([l.longitude, l.latitude]));
         meetupPoints.forEach((p) => bounds.extend([p.longitude, p.latitude]));
-        mapRef.current.fitBounds(bounds, { padding: 80, maxZoom: 16 });
+        map.fitBounds(bounds, { padding: 80, maxZoom: 16 });
       }
     });
   }, [locations, meetupPoints, memberProfiles, mapReady, currentUserId]);
 
   // ── No-token fallback ──────────────────────────────────────────
+  const otherLiveCount = locations.filter((loc) => loc.user_id !== currentUserId).length;
+
   if (!hasToken) {
     return (
-      <div className="flex flex-col flex-1 bg-[#08080f]">
-        <div className="px-4 pt-4 pb-2 space-y-2">
-          <div className="flex items-center gap-2 mb-1">
-            <Users className="h-4 w-4 text-indigo-400" />
-            <p className="text-sm font-semibold text-white">
-              {locations.length > 0 ? `${locations.length} sharing live` : "No one sharing yet"}
-            </p>
-          </div>
-          {locations.map((loc) => {
-            const profile = memberProfiles[loc.user_id];
-            const isMe = loc.user_id === currentUserId;
-            return (
-              <div key={loc.user_id} className="flex items-center gap-3 bg-[#0f0f1e] rounded-2xl border border-white/7 p-3">
-                <div className={`h-10 w-10 rounded-full ${isMe ? "bg-indigo-600" : "bg-sky-600"} flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden`}>
-                  {profile?.avatar ? <img src={profile.avatar} className="h-10 w-10 object-cover" alt="" /> : getInitials(profile?.name)}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">{isMe ? "You" : profile?.name}</p>
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <Radio className="h-3 w-3 text-emerald-400 animate-pulse" /> Live
-                  </p>
-                </div>
-                {!isMe && (
-                  <a href={googleMapsUrl(loc.latitude, loc.longitude)} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 bg-indigo-500/15 text-indigo-400 rounded-xl px-3 py-2 text-xs font-bold shrink-0">
-                    <Navigation className="h-3.5 w-3.5" /> Navigate
-                  </a>
-                )}
-              </div>
-            );
-          })}
-          {locations.length === 0 && (
-            <div className="text-center py-10">
-              <MapPin className="h-8 w-8 text-indigo-500/40 mx-auto mb-2" />
-              <p className="text-sm text-slate-600">Share your location to appear here</p>
-            </div>
-          )}
-        </div>
+      <div className="relative flex flex-col flex-1 bg-[#08080f] overflow-hidden">
+        <LivePanel
+          locations={locations}
+          currentUserId={currentUserId}
+          memberProfiles={memberProfiles}
+          otherLiveCount={otherLiveCount}
+          refreshing={refreshing}
+          onRefresh={refreshLiveData}
+          compact={false}
+        />
         <div className="flex-1" />
         <ShareControls sharing={sharing} showPicker={showPicker} geoError={geoError}
           onShare={() => setShowPicker(true)} onStop={stopSharing}
@@ -283,12 +304,96 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
   }
 
   return (
-    <div className="relative flex-1 flex flex-col">
+    <div className="relative flex-1 flex flex-col bg-[#08080f]">
       <div ref={mapContainer} className="flex-1" style={{ minHeight: "calc(100vh - 160px)" }} />
+      <LivePanel
+        locations={locations}
+        currentUserId={currentUserId}
+        memberProfiles={memberProfiles}
+        otherLiveCount={otherLiveCount}
+        refreshing={refreshing}
+        onRefresh={refreshLiveData}
+        compact
+      />
       <ShareControls sharing={sharing} showPicker={showPicker} geoError={geoError}
         onShare={() => setShowPicker(true)} onStop={stopSharing}
         onPickDuration={startSharing} onDismissPicker={() => setShowPicker(false)}
         onMeetup={dropMeetupPoint} />
+    </div>
+  );
+}
+
+function LivePanel({ locations, currentUserId, memberProfiles, otherLiveCount, refreshing, onRefresh, compact }: {
+  locations: LiveLocation[];
+  currentUserId: string;
+  memberProfiles: Record<string, Profile>;
+  otherLiveCount: number;
+  refreshing: boolean;
+  onRefresh: () => void;
+  compact: boolean;
+}) {
+  const title = locations.length === 0
+    ? "No one is live yet"
+    : otherLiveCount === 0
+      ? "Only you are live"
+      : `${otherLiveCount} friend${otherLiveCount === 1 ? "" : "s"} live nearby`;
+
+  return (
+    <div className={compact ? "absolute left-3 right-3 top-3 z-20" : "px-4 pt-4 pb-2"}>
+      <div className="rounded-2xl border border-white/10 bg-[#0c1020]/90 backdrop-blur-2xl shadow-2xl shadow-black/30 overflow-hidden">
+        <div className="flex items-center gap-3 p-4">
+          <div className="h-11 w-11 rounded-xl bg-emerald-500/12 flex items-center justify-center shrink-0">
+            <Radio className="h-5 w-5 text-emerald-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-white">{title}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {locations.length > 0 ? `${locations.length} total sharing now` : "Ask a trip member to tap Share Location"}
+            </p>
+          </div>
+          <button
+            onClick={onRefresh}
+            className="h-9 w-9 rounded-xl bg-white/7 flex items-center justify-center text-slate-300"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+
+        {locations.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto px-4 pb-4">
+            {locations.map((loc) => {
+              const profile = memberProfiles[loc.user_id];
+              const isMe = loc.user_id === currentUserId;
+              return (
+                <a
+                  key={loc.user_id}
+                  href={googleMapsUrl(loc.latitude, loc.longitude)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-w-[144px] rounded-xl border border-white/8 bg-white/5 p-3 active:scale-[0.98] transition-transform"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`h-8 w-8 rounded-full ${isMe ? "bg-indigo-600" : "bg-sky-600"} flex items-center justify-center text-white text-xs font-bold overflow-hidden shrink-0`}>
+                      {profile?.avatar ? <img src={profile.avatar} className="h-8 w-8 object-cover" alt="" /> : getInitials(profile?.name)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{isMe ? "You" : profile?.name || "Member"}</p>
+                      <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                        <Sparkles className="h-2.5 w-2.5" />
+                        {sharingLabel(loc.sharing_until)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-2 flex items-center gap-1">
+                    <Crosshair className="h-3 w-3" />
+                    Updated {timeAgo(loc.updated_at)}
+                  </p>
+                </a>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
