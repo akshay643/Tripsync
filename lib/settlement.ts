@@ -8,8 +8,10 @@ export function calculateSettlements(
   memberIds.forEach((id) => (balances[id] = 0));
 
   for (const expense of expenses) {
+    balances[expense.paid_by] = balances[expense.paid_by] || 0;
     balances[expense.paid_by] = (balances[expense.paid_by] || 0) + expense.amount;
     for (const split of expense.expense_splits) {
+      balances[split.user_id] = balances[split.user_id] || 0;
       balances[split.user_id] = (balances[split.user_id] || 0) - split.amount;
     }
   }

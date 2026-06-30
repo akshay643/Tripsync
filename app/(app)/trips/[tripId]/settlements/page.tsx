@@ -4,6 +4,21 @@ import { notFound } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettlementList } from "@/components/settlements/SettlementList";
 import { calculateSettlements } from "@/lib/settlement";
+import type { Expense, ExpenseSplit, Profile } from "@/types";
+
+type MemberRow = {
+  user_id: string;
+  profiles: Profile | null;
+};
+
+type RawMemberRow = {
+  user_id: string;
+  profiles: Profile | Profile[] | null;
+};
+
+type ExpenseWithSplits = Expense & {
+  expense_splits: ExpenseSplit[];
+};
 
 export default async function SettlementsPage({
   params,
@@ -20,7 +35,11 @@ export default async function SettlementsPage({
     .single();
 
   if (!trip) notFound();
-  const isMember = trip.trip_members.some((m: any) => m.user_id === user?.id);
+  const tripMembers = (trip.trip_members as RawMemberRow[]).map((member) => ({
+    user_id: member.user_id,
+    profiles: Array.isArray(member.profiles) ? member.profiles[0] ?? null : member.profiles,
+  })) satisfies MemberRow[];
+  const isMember = tripMembers.some((m) => m.user_id === user?.id);
   if (!isMember) notFound();
 
   const { data: expenses } = await supabase
@@ -34,16 +53,35 @@ export default async function SettlementsPage({
     .eq("trip_id", tripId)
     .eq("settled", true);
 
-  const memberIds = trip.trip_members.map((m: any) => m.user_id);
-  const settlements = calculateSettlements(expenses ?? [], memberIds);
+  const typedExpenses = (expenses ?? []) as ExpenseWithSplits[];
+  const participantIds = new Set<string>();
+  tripMembers.forEach((m) => participantIds.add(m.user_id));
+  typedExpenses.forEach((expense) => {
+    participantIds.add(expense.paid_by);
+    expense.expense_splits?.forEach((split) => participantIds.add(split.user_id));
+  });
 
-  const profiles: Record<string, any> = {};
-  trip.trip_members.forEach((m: any) => {
+  const memberIds = Array.from(participantIds);
+  const settlements = calculateSettlements(typedExpenses, memberIds);
+
+  const profiles: Record<string, Profile> = {};
+  tripMembers.forEach((m) => {
     if (m.profiles) profiles[m.user_id] = m.profiles;
   });
 
+  const missingProfileIds = memberIds.filter((id) => !profiles[id]);
+  if (missingProfileIds.length > 0) {
+    const { data: historicalProfiles } = await supabase
+      .from("profiles")
+      .select("*")
+      .in("id", missingProfileIds);
+    ((historicalProfiles ?? []) as Profile[]).forEach((profile) => {
+      profiles[profile.id] = profile;
+    });
+  }
+
   const settledKeys = new Set(
-    (existingSettlements ?? []).map((s: any) => `${s.from_user}:${s.to_user}`)
+    (existingSettlements ?? []).map((s) => `${s.from_user}:${s.to_user}`)
   );
 
   return (
