@@ -142,26 +142,24 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
     setError("");
     setNotice("");
 
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("create_itinerary_day", {
-      p_trip_id: tripId,
-      p_date: firstDay.date,
-      p_title: firstDay.title || null,
-    });
-
-    if (rpcErr) {
-      const { error: insertErr } = await supabase.from("itinerary_days").insert({
-        trip_id: tripId,
+    const response = await fetch(`/api/trips/${tripId}/itinerary/days`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         date: firstDay.date,
-        day_number: days.length + 1,
         title: firstDay.title || null,
-      });
-      if (insertErr) {
-        setError(insertErr.message || rpcErr.message || "Could not create itinerary day.");
-        setCreatingDay(false);
-        return;
-      }
-    } else if (rpcData) {
-      setDays((prev) => [...prev, { ...(rpcData as ItineraryDay), items: [] }]);
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setError(result.error || "Could not create itinerary day.");
+      setCreatingDay(false);
+      return;
+    }
+
+    if (result.day) {
+      setDays((prev) => [...prev, { ...(result.day as ItineraryDay), items: [] }]);
     }
 
     await refreshDaysAndItems();
@@ -180,37 +178,29 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
     const day = days.find((d) => d.id === dayId);
     if (!day) { setSavingDay(null); return; }
 
-    const { data: rpcData, error: rpcErr } = await supabase.rpc("add_itinerary_item", {
-      p_trip_id: tripId,
-      p_day_id: dayId,
-      p_title: newItem.title.trim(),
-      p_time: newItem.time || null,
-      p_location: newItem.location || null,
+    const response = await fetch(`/api/trips/${tripId}/itinerary/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dayId,
+        title: newItem.title.trim(),
+        time: newItem.time || null,
+        location: newItem.location || null,
+      }),
     });
+    const result = await response.json().catch(() => ({}));
 
-    let insertErr = rpcErr;
-    if (rpcErr) {
-      const fallback = await supabase
-        .from("itinerary_items")
-        .insert({
-          day_id: dayId, trip_id: tripId,
-          title: newItem.title.trim(),
-          time: newItem.time || null,
-          location: newItem.location || null,
-          order_index: day.items?.length ?? 0,
-        });
-      insertErr = fallback.error;
-    } else if (rpcData) {
-      setDays((prev) => prev.map((d) => d.id === dayId ? {
-        ...d,
-        items: [...(d.items ?? []), rpcData as ItineraryItem],
-      } : d));
-    }
-
-    if (insertErr) {
-      setError(insertErr.message || "Failed to save. Please check the itinerary database policy.");
+    if (!response.ok) {
+      setError(result.error || "Failed to save itinerary activity.");
       setSavingDay(null);
       return;
+    }
+
+    if (result.item) {
+      setDays((prev) => prev.map((d) => d.id === dayId ? {
+        ...d,
+        items: [...(d.items ?? []), result.item as ItineraryItem],
+      } : d));
     }
 
     try {
@@ -228,11 +218,14 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
   }
 
   async function removeItem(dayId: string, itemId: string) {
-    const { error: delErr } = await supabase.from("itinerary_items").delete().eq("id", itemId);
-    if (!delErr) {
+    const response = await fetch(`/api/trips/${tripId}/itinerary/items?itemId=${encodeURIComponent(itemId)}`, {
+      method: "DELETE",
+    });
+    const result = await response.json().catch(() => ({}));
+    if (response.ok) {
       setDays((prev) => prev.map((d) => d.id === dayId ? { ...d, items: d.items?.filter((i) => i.id !== itemId) } : d));
     } else {
-      setError(delErr.message || "Could not delete this activity.");
+      setError(result.error || "Could not delete this activity.");
     }
   }
 

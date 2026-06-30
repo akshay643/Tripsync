@@ -1,4 +1,4 @@
--- Robust itinerary helpers.
+-- Rossbust itinerary helpers.
 -- Run this in Supabase SQL Editor if itinerary buttons do nothing or saves fail.
 
 create or replace function public.is_trip_member(p_trip_id uuid)
