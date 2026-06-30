@@ -15,7 +15,7 @@ interface TripMapProps {
 }
 
 interface LiveLocation {
-  id?: string;
+  id: string;
   user_id: string;
   trip_id: string;
   latitude: number;
@@ -73,15 +73,29 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
 
   // ── DB fetch helpers ───────────────────────────────────────────
   async function fetchLocations() {
-    const now = new Date().toISOString();
-    const { data } = await supabase
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc("get_active_trip_locations", { p_trip_id: tripId });
+
+    if (!rpcError && rpcData) {
+      setLocations(rpcData as LiveLocation[]);
+      return;
+    }
+
+    const { data, error } = await supabase
       .from("locations")
       .select("*")
       .eq("trip_id", tripId)
       .eq("sharing_enabled", true)
-      .or(`sharing_until.is.null,sharing_until.gt.${now}`)
       .order("updated_at", { ascending: false });
-    if (data) setLocations(data);
+    if (error) {
+      setGeoError(error.message || rpcError?.message || "Could not load shared locations");
+      return;
+    }
+
+    const active = (data ?? []).filter((loc) =>
+      !loc.sharing_until || new Date(loc.sharing_until).getTime() > Date.now()
+    );
+    setLocations(active as LiveLocation[]);
   }
 
   async function fetchMeetupPoints() {
@@ -145,18 +159,45 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
     return new Promise<void>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          await supabase.from("locations").upsert({
-            user_id: currentUserId,
-            trip_id: tripId,
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            sharing_enabled: true,
-            sharing_until: until,
-            updated_at: new Date().toISOString(),
-          });
+          const payload = {
+            p_trip_id: tripId,
+            p_latitude: pos.coords.latitude,
+            p_longitude: pos.coords.longitude,
+            p_sharing_until: until,
+          };
+          const { error: rpcError } = await supabase.rpc("share_my_location", payload);
+
+          if (rpcError) {
+            const { error: upsertError } = await supabase.from("locations").upsert({
+              user_id: currentUserId,
+              trip_id: tripId,
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              sharing_enabled: true,
+              sharing_until: until,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id,trip_id" });
+
+            if (upsertError) {
+              const message = upsertError.message || rpcError.message || "Could not share location";
+              setGeoError(message);
+              reject(new Error(message));
+              return;
+            }
+          }
+
+          await fetchLocations();
           resolve();
         },
-        (err) => { setGeoError("Location access denied — allow it in browser settings."); reject(err); },
+        (err) => {
+          const message = err.code === 1
+            ? "Location permission is blocked. Allow location access in browser settings."
+            : err.code === 2
+              ? "Could not find your current location. Try again near a window or with GPS on."
+              : "Location request timed out. Try again.";
+          setGeoError(message);
+          reject(err);
+        },
         { enableHighAccuracy: false, timeout: 10000 }
       );
     });
@@ -171,17 +212,21 @@ export function TripMap({ tripId, currentUserId, memberProfiles }: TripMapProps)
       setSharing(true);
       intervalRef.current = setInterval(() => pushLocation(until), 40000);
       if (minutes > 0) setTimeout(stopSharing, minutes * 60 * 1000);
-    } catch { }
+    } catch { /* error state set above */ }
   }
 
   async function stopSharing() {
     setSharing(false);
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    await supabase.from("locations")
-      .update({ sharing_enabled: false })
-      .eq("user_id", currentUserId)
-      .eq("trip_id", tripId);
-    fetchLocations();
+    const { error: rpcError } = await supabase.rpc("stop_my_location", { p_trip_id: tripId });
+    if (rpcError) {
+      const { error } = await supabase.from("locations")
+        .update({ sharing_enabled: false, updated_at: new Date().toISOString() })
+        .eq("user_id", currentUserId)
+        .eq("trip_id", tripId);
+      if (error) setGeoError(error.message || rpcError.message || "Could not stop sharing");
+    }
+    await fetchLocations();
   }
 
   async function refreshLiveData() {

@@ -58,19 +58,42 @@ export function LocationShareButton({ tripId, currentUserId }: Props) {
     return new Promise<void>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          await supabase.from("locations").upsert({
-            user_id: currentUserId,
-            trip_id: tripId,
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            sharing_enabled: true,
-            sharing_until: until,
-            updated_at: new Date().toISOString(),
+          const { error: rpcError } = await supabase.rpc("share_my_location", {
+            p_trip_id: tripId,
+            p_latitude: pos.coords.latitude,
+            p_longitude: pos.coords.longitude,
+            p_sharing_until: until,
           });
+
+          if (rpcError) {
+            const { error: upsertError } = await supabase.from("locations").upsert({
+              user_id: currentUserId,
+              trip_id: tripId,
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              sharing_enabled: true,
+              sharing_until: until,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id,trip_id" });
+
+            if (upsertError) {
+              const message = upsertError.message || rpcError.message || "Could not share location";
+              setError(message);
+              reject(new Error(message));
+              return;
+            }
+          }
+
           resolve();
         },
         (err) => {
-          setError("Allow location access in browser settings");
+          setError(
+            err.code === 1
+              ? "Allow location access in browser settings"
+              : err.code === 2
+                ? "Could not find your current location"
+                : "Location request timed out"
+          );
           reject(err);
         },
         { enableHighAccuracy: false, timeout: 10000 }
@@ -93,8 +116,14 @@ export function LocationShareButton({ tripId, currentUserId }: Props) {
   async function stop() {
     setSharing(false);
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    await supabase.from("locations").update({ sharing_enabled: false })
-      .eq("user_id", currentUserId).eq("trip_id", tripId);
+    const { error: rpcError } = await supabase.rpc("stop_my_location", { p_trip_id: tripId });
+    if (rpcError) {
+      const { error } = await supabase.from("locations").update({
+        sharing_enabled: false,
+        updated_at: new Date().toISOString(),
+      }).eq("user_id", currentUserId).eq("trip_id", tripId);
+      if (error) setError(error.message || rpcError.message || "Could not stop sharing");
+    }
   }
 
   return (
