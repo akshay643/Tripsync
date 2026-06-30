@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, MapPin, Clock, Trash2, Lock, Sparkles, Save, RefreshCw } from "lucide-react";
+import { Plus, MapPin, Clock, Trash2, Lock, Sparkles, Save, RefreshCw, CalendarPlus, Loader2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import type { ItineraryDay, ItineraryItem } from "@/types";
 
@@ -43,8 +43,14 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
   const [savingDay, setSavingDay] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [newItem, setNewItem] = useState({ title: "", time: "", location: "" });
+  const [firstDay, setFirstDay] = useState({
+    date: new Date().toISOString().split("T")[0],
+    title: "",
+  });
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [savedPulse, setSavedPulse] = useState<string | null>(null);
+  const [creatingDay, setCreatingDay] = useState(false);
 
   async function refreshItemsForDay(dayId: string) {
     const { data, error: fetchErr } = await supabase
@@ -77,6 +83,36 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
     }
   }
 
+  async function refreshDaysAndItems() {
+    setRefreshing(true);
+    setError("");
+    try {
+      const { data: freshDays, error: daysErr } = await supabase
+        .from("itinerary_days")
+        .select("*")
+        .eq("trip_id", tripId)
+        .order("day_number");
+      if (daysErr) throw daysErr;
+
+      const typedDays = (freshDays ?? []) as ItineraryDay[];
+      const dayIds = typedDays.map((day) => day.id);
+      const { data: items, error: itemsErr } = dayIds.length > 0
+        ? await supabase.from("itinerary_items").select("*").in("day_id", dayIds).order("order_index")
+        : { data: [], error: null };
+      if (itemsErr) throw itemsErr;
+
+      const typedItems = (items ?? []) as ItineraryItem[];
+      setDays(typedDays.map((day) => ({
+        ...day,
+        items: typedItems.filter((item) => item.day_id === day.id),
+      })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not refresh itinerary");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   useEffect(() => {
     const channel = supabase
       .channel(`itinerary:${tripId}`)
@@ -88,26 +124,88 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
       }, () => {
         void refreshAllItems();
       })
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "itinerary_days",
+        filter: `trip_id=eq.${tripId}`,
+      }, () => {
+        void refreshDaysAndItems();
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [tripId]);
 
+  async function createFirstDay() {
+    if (!firstDay.date) return;
+    setCreatingDay(true);
+    setError("");
+    setNotice("");
+
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("create_itinerary_day", {
+      p_trip_id: tripId,
+      p_date: firstDay.date,
+      p_title: firstDay.title || null,
+    });
+
+    if (rpcErr) {
+      const { error: insertErr } = await supabase.from("itinerary_days").insert({
+        trip_id: tripId,
+        date: firstDay.date,
+        day_number: days.length + 1,
+        title: firstDay.title || null,
+      });
+      if (insertErr) {
+        setError(insertErr.message || rpcErr.message || "Could not create itinerary day.");
+        setCreatingDay(false);
+        return;
+      }
+    } else if (rpcData) {
+      setDays((prev) => [...prev, { ...(rpcData as ItineraryDay), items: [] }]);
+    }
+
+    await refreshDaysAndItems();
+    setNotice("Itinerary day created.");
+    setCreatingDay(false);
+  }
+
   async function addItem(dayId: string) {
-    if (!newItem.title.trim()) return;
+    if (!newItem.title.trim()) {
+      setError("Add a title before saving.");
+      return;
+    }
     setSavingDay(dayId);
     setError("");
+    setNotice("");
     const day = days.find((d) => d.id === dayId);
     if (!day) { setSavingDay(null); return; }
 
-    const { error: insertErr } = await supabase
-      .from("itinerary_items")
-      .insert({
-        day_id: dayId, trip_id: tripId,
-        title: newItem.title.trim(),
-        time: newItem.time || null,
-        location: newItem.location || null,
-        order_index: day.items?.length ?? 0,
-      });
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("add_itinerary_item", {
+      p_trip_id: tripId,
+      p_day_id: dayId,
+      p_title: newItem.title.trim(),
+      p_time: newItem.time || null,
+      p_location: newItem.location || null,
+    });
+
+    let insertErr = rpcErr;
+    if (rpcErr) {
+      const fallback = await supabase
+        .from("itinerary_items")
+        .insert({
+          day_id: dayId, trip_id: tripId,
+          title: newItem.title.trim(),
+          time: newItem.time || null,
+          location: newItem.location || null,
+          order_index: day.items?.length ?? 0,
+        });
+      insertErr = fallback.error;
+    } else if (rpcData) {
+      setDays((prev) => prev.map((d) => d.id === dayId ? {
+        ...d,
+        items: [...(d.items ?? []), rpcData as ItineraryItem],
+      } : d));
+    }
 
     if (insertErr) {
       setError(insertErr.message || "Failed to save. Please check the itinerary database policy.");
@@ -119,6 +217,7 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
       await refreshItemsForDay(dayId);
       setNewItem({ title: "", time: "", location: "" });
       setAddingItem(null);
+      setNotice("Saved to the trip itinerary.");
       setSavedPulse(dayId);
       setTimeout(() => setSavedPulse(null), 1400);
     } catch (err) {
@@ -132,6 +231,8 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
     const { error: delErr } = await supabase.from("itinerary_items").delete().eq("id", itemId);
     if (!delErr) {
       setDays((prev) => prev.map((d) => d.id === dayId ? { ...d, items: d.items?.filter((i) => i.id !== itemId) } : d));
+    } else {
+      setError(delErr.message || "Could not delete this activity.");
     }
   }
 
@@ -141,10 +242,41 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
 
   if (days.length === 0) {
     return (
-      <div className="min-h-screen bg-[#08080f] flex flex-col items-center justify-center py-16 text-center px-6">
-        <div className="text-5xl mb-4">🗓️</div>
-        <p className="font-bold text-white text-lg">No itinerary yet</p>
-        <p className="text-sm text-slate-500 mt-2">Itinerary days are created from your trip dates.</p>
+      <div className="min-h-screen bg-[#08080f] flex flex-col justify-center py-16 px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-3xl border border-white/10 bg-[#101526] p-5 shadow-2xl shadow-black/30"
+        >
+          <div className="h-14 w-14 rounded-2xl bg-violet-500/15 flex items-center justify-center mb-4">
+            <CalendarPlus className="h-7 w-7 text-violet-300" />
+          </div>
+          <p className="font-black text-white text-lg">Start your itinerary</p>
+          <p className="text-sm text-slate-500 mt-2">Create a day, then add activities that sync live with the group.</p>
+          <div className="mt-5 space-y-3">
+            <input
+              type="date"
+              value={firstDay.date}
+              onChange={(e) => setFirstDay((prev) => ({ ...prev, date: e.target.value }))}
+              className="w-full h-11 rounded-xl bg-white/5 border border-white/8 text-white px-3 text-sm [color-scheme:dark]"
+            />
+            <input
+              placeholder="Day title (optional)"
+              value={firstDay.title}
+              onChange={(e) => setFirstDay((prev) => ({ ...prev, title: e.target.value }))}
+              className="w-full h-11 rounded-xl bg-white/5 border border-white/8 text-white placeholder:text-slate-600 px-3 text-sm"
+            />
+            {error && <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
+            <button
+              onClick={createFirstDay}
+              disabled={creatingDay || !firstDay.date}
+              className="w-full h-11 rounded-xl bg-indigo-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {creatingDay ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Create Day
+            </button>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -174,6 +306,12 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           </button>
         </div>
+        {notice && (
+          <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+            className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+            {notice}
+          </motion.p>
+        )}
         {error && (
           <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
             className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
@@ -290,6 +428,7 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
                       <div className="flex gap-1.5 overflow-x-auto pb-1">
                         {QUICK_ACTIVITIES.map((activity) => (
                           <button
+                            type="button"
                             key={activity.title}
                             onClick={() => pickQuickActivity(activity)}
                             className="shrink-0 rounded-full bg-white/6 px-3 py-1.5 text-[11px] font-semibold text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-200"
@@ -313,11 +452,11 @@ export function ItineraryView({ tripId, days: initialDays, currentUserId }: Itin
                         />
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => addItem(day.id)} disabled={savingDay === day.id || !newItem.title.trim()}
+                        <button type="button" onClick={() => addItem(day.id)} disabled={savingDay === day.id || !newItem.title.trim()}
                           className="flex-1 h-9 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-40 transition-colors">
                           {savingDay === day.id ? "Saving..." : "Add"}
                         </button>
-                        <button onClick={() => { setAddingItem(null); setError(""); }}
+                        <button type="button" onClick={() => { setAddingItem(null); setError(""); }}
                           className="px-4 h-9 rounded-xl bg-white/5 text-slate-400 text-sm">
                           Cancel
                         </button>
